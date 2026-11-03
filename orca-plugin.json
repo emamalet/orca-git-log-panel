@@ -3,7 +3,7 @@
   "manifestVersion": 2,
   "id": "git-log",
   "name": "Git Log",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "IntelliJ-style Git log: commit graph, branches, filters and details, with multi-select squash, fixup, drop, reword, interactive rebase, cherry-pick, revert and reset from a right-click menu.",
   "license": "MIT",
   "repository": "https://github.com/emamalet/Orca-git-log-panel",
