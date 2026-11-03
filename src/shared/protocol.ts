@@ -1,0 +1,149 @@
+// The panel/editor <-> worker contract. Both sides import these types; nothing here runs.
+
+export interface RepoInfo {
+  root: string
+  name: string
+  workspaceId: string | null
+  head: { branch: string | null; hash: string | null }
+  /** A sequencer operation left in progress (by a terminal, say); rewrites are refused while set. */
+  operation: 'rebase' | 'merge' | 'cherry-pick' | 'revert' | null
+}
+
+/** A local workspace the focused context could be, when several share its name and branch. */
+export interface WorkspaceChoice {
+  id: string
+  name: string
+  path: string
+  branch: string
+}
+
+export type RepoResult = { ok: true; repo: RepoInfo } | { ok: false; reason: string; choices?: WorkspaceChoice[] }
+
+export interface BranchRef {
+  /** Short name: `main`, `origin/main`, `v1.0`. */
+  name: string
+  /** Full ref name: `refs/heads/main`. */
+  full: string
+  hash: string
+  upstream?: string
+}
+
+export interface RefsResult {
+  head: { branch: string | null; hash: string | null }
+  locals: BranchRef[]
+  remotes: BranchRef[]
+  tags: BranchRef[]
+  users: string[]
+  me: string | null
+}
+
+export interface CommitRow {
+  hash: string
+  parents: string[]
+  author: string
+  email: string
+  authorTime: number
+  committer: string
+  commitTime: number
+  subject: string
+  /** Full ref names decorating this commit; `HEAD` when HEAD is detached here. */
+  refs: string[]
+}
+
+export interface LogFilter {
+  text?: string
+  regex?: boolean
+  matchCase?: boolean
+  /** Revisions to show; empty means every branch, remote branch and tag. */
+  branches?: string[]
+  users?: string[]
+  /** Unix seconds. */
+  since?: number
+  until?: number
+  paths?: string[]
+}
+
+export interface LogPage {
+  commits: CommitRow[]
+  hasMore: boolean
+}
+
+export interface FileChange {
+  status: string
+  path: string
+  oldPath?: string
+}
+
+export interface CommitDetails {
+  hash: string
+  parents: string[]
+  author: string
+  email: string
+  authorTime: number
+  committer: string
+  committerEmail: string
+  commitTime: number
+  message: string
+  files: FileChange[]
+  branches: string[]
+}
+
+export type ResetMode = 'soft' | 'mixed' | 'hard' | 'keep'
+
+export type RebaseAction = 'pick' | 'reword' | 'squash' | 'fixup' | 'drop'
+
+export interface PlanItem {
+  hash: string
+  action: RebaseAction
+  /** pick: the final message of its group; reword/squash: this commit's new message. */
+  message?: string
+}
+
+export type RewriteKind = 'squash' | 'fixup' | 'drop' | 'reword' | 'rebase' | 'undo'
+
+export type ActionRequest =
+  | { kind: 'checkout'; target: string }
+  | { kind: 'branch'; hash: string; name: string; checkout: boolean }
+  | { kind: 'tag'; hash: string; name: string }
+  | { kind: 'cherryPick'; hashes: string[] }
+  | { kind: 'revert'; hashes: string[] }
+  | { kind: 'reset'; hash: string; mode: ResetMode }
+  | { kind: 'undo'; hash: string }
+  | { kind: 'squash'; hashes: string[]; message: string }
+  | { kind: 'fixup'; hashes: string[] }
+  | { kind: 'drop'; hashes: string[] }
+  | { kind: 'reword'; hash: string; message: string }
+  | { kind: 'rebase'; plan: PlanItem[] }
+
+export interface RangeCommit {
+  hash: string
+  subject: string
+  message: string
+}
+
+export type CheckResult =
+  | { ok: true; pushed: string[]; commits: RangeCommit[] }
+  | { ok: false; reason: string }
+
+export interface ActionResult {
+  ok: boolean
+  message: string
+  /** HEAD before the action, so the UI can offer Undo. */
+  previousHead?: string
+}
+
+declare module 'orca' {
+  interface PluginRequests {
+    'repo.resolve': { input: { root?: string; workspaceId?: string }; output: RepoResult }
+    'repo.refs': { input: { root: string }; output: RefsResult }
+    'repo.watch': { input: { root: string }; output: { ok: boolean } }
+    'log.page': { input: { root: string; filter: LogFilter; skip: number; limit?: number }; output: LogPage }
+    'commit.details': { input: { root: string; hash: string }; output: CommitDetails }
+    'action.check': { input: { root: string; kind: RewriteKind; hashes: string[] }; output: CheckResult }
+    'action.run': { input: { root: string; action: ActionRequest }; output: ActionResult }
+    'tab.open': { input: { workspaceId?: string }; output: { ok: boolean; reason?: string } }
+  }
+  interface PluginPanelEvents {
+    'repo.changed': { root: string }
+  }
+}

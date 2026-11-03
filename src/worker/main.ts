@@ -1,0 +1,112 @@
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import type { OrcaWorkerApi } from 'orca/worker'
+import type { RepoResult } from '../shared/protocol.ts'
+import { checkRewrite, runAction } from './actions.ts'
+import { createGit, type Git } from './git.ts'
+import { readDetails, readLogPage, readRefs } from './log.ts'
+import { focusedWorkspace, resolveRepo, toplevel } from './repo.ts'
+import { watchRepo, type RepoWatcher } from './watch.ts'
+
+export const ANCHOR = '.orca-git-log.gitlog'
+
+let orcaApi: OrcaWorkerApi
+const repos = new Map<string, Git>()
+const watchers = new Map<string, Promise<RepoWatcher | null>>()
+
+async function setting<T>(key: string, fallback: T): Promise<T> {
+  try {
+    const value = await orcaApi.settings.get(key)
+    return (value ?? fallback) as T
+  } catch {
+    return fallback
+  }
+}
+
+const gitPath = () => setting('gitPath', 'git').then((path) => (typeof path === 'string' && path.trim()) || 'git')
+
+/** A git runner for a root a panel sends back; only roots this worker resolved are accepted. */
+async function gitFor(root: unknown): Promise<Git> {
+  if (typeof root !== 'string' || !root) throw new Error('Missing repository.')
+  const known = repos.get(root)
+  if (known) return known
+  const path = await gitPath()
+  if (resolve(root) !== root || (await toplevel(root, path)) !== root) throw new Error(`${root} is not a Git repository.`)
+  const git = createGit(root, path)
+  repos.set(root, git)
+  return git
+}
+
+/** Adds `pattern` to the repository's info/exclude so the anchor never shows as untracked. */
+async function exclude(git: Git, root: string, pattern: string): Promise<void> {
+  const file = resolve(root, (await git.out(['rev-parse', '--git-path', 'info/exclude'])).trim())
+  const current = existsSync(file) ? readFileSync(file, 'utf8') : ''
+  if (current.split(/\r?\n/).includes(pattern)) return
+  mkdirSync(dirname(file), { recursive: true })
+  appendFileSync(file, `${current && !current.endsWith('\n') ? '\n' : ''}${pattern}\n`)
+}
+
+async function openTab(prefer?: string): Promise<{ ok: boolean; reason?: string }> {
+  const workspace = await focusedWorkspace(orcaApi, prefer)
+  if ('reason' in workspace) return { ok: false, reason: workspace.reason }
+  const path = await gitPath()
+  const root = await toplevel(workspace.path, path)
+  if (!root) return { ok: false, reason: 'This workspace is not a Git repository.' }
+  writeFileSync(join(workspace.path, ANCHOR), `${JSON.stringify({ root, workspaceId: workspace.id }, null, 2)}\n`)
+  await exclude(createGit(root, path), root, ANCHOR)
+  await orcaApi.host.call('editor.open', { workspaceId: workspace.id, path: ANCHOR })
+  return { ok: true }
+}
+
+export default function activate(orca: OrcaWorkerApi): void {
+  orcaApi = orca
+
+  orca.panels.handle('repo.resolve', async (input): Promise<RepoResult> => {
+    const result = await resolveRepo(orca, await gitPath(), input?.root, input?.workspaceId)
+    if (!result.ok) return result
+    if (result.git) repos.set(result.repo.root, result.git)
+    return { ok: true, repo: result.repo }
+  })
+
+  orca.panels.handle('repo.refs', async ({ root }) => readRefs(await gitFor(root)))
+
+  orca.panels.handle('repo.watch', async ({ root }) => {
+    const git = await gitFor(root)
+    if (!watchers.has(root)) {
+      watchers.set(
+        root,
+        watchRepo(git, root, () => orca.panels.post('repo.changed', { root })).catch(() => null)
+      )
+    }
+    return { ok: (await watchers.get(root)) !== null }
+  })
+
+  orca.panels.handle('log.page', async ({ root, filter, skip, limit }) => {
+    const pageSize = Number(limit ?? (await setting('pageSize', 300)))
+    const size = Math.min(2000, Math.max(1, Number.isFinite(pageSize) ? Math.floor(pageSize) : 300))
+    return readLogPage(await gitFor(root), filter ?? {}, Math.max(0, Math.floor(Number(skip) || 0)), size)
+  })
+
+  orca.panels.handle('commit.details', async ({ root, hash }) => readDetails(await gitFor(root), hash))
+
+  orca.panels.handle('action.check', async ({ root, kind, hashes }) => checkRewrite(await gitFor(root), kind, hashes))
+
+  orca.panels.handle('action.run', async ({ root, action }) => {
+    const result = await runAction(await gitFor(root), action)
+    orca.panels.post('repo.changed', { root })
+    return result
+  })
+
+  orca.panels.handle('tab.open', (input) => openTab(input?.workspaceId))
+
+  orca.commands.register('open-tab', async () => {
+    const result = await openTab()
+    if (!result.ok) orca.log(`open-tab: ${result.reason}`)
+    return result
+  })
+}
+
+export function deactivate(): void {
+  for (const watcher of watchers.values()) void watcher.then((w) => w?.close())
+  watchers.clear()
+}

@@ -1,0 +1,247 @@
+import type { LogFilter, RefsResult } from '../shared/protocol.ts'
+import { h, icon } from './dom.ts'
+import { showPopover } from './menu.ts'
+
+export interface FilterHost {
+  filter: LogFilter
+  refs: RefsResult | null
+  /** Applies a filter change and reloads the log. */
+  apply(change: Partial<LogFilter>): void
+}
+
+const DAY = 86_400
+
+function shortRef(full: string): string {
+  return full.replace(/^refs\/(heads|remotes|tags)\//, '')
+}
+
+function summary(name: string, values: string[]): string {
+  if (!values.length) return name
+  return `${name}: ${values[0]}${values.length > 1 ? ` +${values.length - 1}` : ''}`
+}
+
+function filterButton(name: string, onOpen: (button: HTMLElement) => void, onClear: () => void) {
+  const label = h('span', null, name)
+  const clear = h('span', {
+    class: 'clear',
+    title: `Clear ${name.toLowerCase()} filter`,
+    onclick: (event: MouseEvent) => {
+      event.stopPropagation()
+      onClear()
+    }
+  }, icon('close'))
+  const button: HTMLButtonElement = h(
+    'button',
+    { class: 'tool filter', onclick: () => onOpen(button) },
+    label,
+    icon('chevronDown'),
+    clear
+  )
+  return {
+    el: button,
+    set(text: string, active: boolean) {
+      label.textContent = text
+      button.classList.toggle('set', active)
+      button.title = text
+    }
+  }
+}
+
+/** A searchable checklist popover. */
+function checklist(
+  anchor: HTMLElement,
+  groups: { title?: string; values: { value: string; label: string; icon?: HTMLElement | SVGElement }[] }[],
+  selected: string[],
+  onChange: (values: string[]) => void
+) {
+  const chosen = new Set(selected)
+  const search = h('input', { class: 'field pop-search', placeholder: 'Filter…', spellcheck: false }) as HTMLInputElement
+  const list = h('div', null)
+  const render = () => {
+    const q = search.value.trim().toLowerCase()
+    const all = h(
+      'div',
+      {
+        class: `option${chosen.size ? '' : ' checked'}`,
+        onclick: () => {
+          chosen.clear()
+          onChange([])
+          render()
+        }
+      },
+      h('span', { class: 'check' }, icon('check')),
+      h('span', { class: 'label' }, 'All')
+    )
+    const parts: HTMLElement[] = q ? [] : [all]
+    for (const group of groups) {
+      const values = group.values.filter((v) => !q || v.label.toLowerCase().includes(q))
+      if (!values.length) continue
+      if (group.title) parts.push(h('div', { class: 'option-group' }, group.title))
+      for (const v of values) {
+        parts.push(
+          h(
+            'div',
+            {
+              class: `option${chosen.has(v.value) ? ' checked' : ''}`,
+              title: v.value,
+              onclick: () => {
+                if (chosen.has(v.value)) chosen.delete(v.value)
+                else chosen.add(v.value)
+                onChange([...chosen])
+                render()
+              }
+            },
+            h('span', { class: 'check' }, icon('check')),
+            v.icon ?? null,
+            h('span', { class: 'label' }, v.label)
+          )
+        )
+      }
+    }
+    list.replaceChildren(...parts)
+  }
+  search.addEventListener('input', render)
+  render()
+  showPopover(anchor, h('div', { style: 'min-width:240px' }, search, list))
+}
+
+export function createFilterBar(host: FilterHost) {
+  const branch = filterButton(
+    'Branch',
+    (anchor) => {
+      const refs = host.refs
+      if (!refs) return
+      const item = (full: string, name: string, kind: 'local' | 'remote' | 'tag') => ({
+        value: full,
+        label: name,
+        icon: icon(kind === 'tag' ? 'tag' : 'branch', `ic-${kind}`)
+      })
+      checklist(
+        anchor,
+        [
+          { values: refs.head.hash ? [{ value: 'HEAD', label: 'HEAD (Current Branch)' }] : [] },
+          { title: 'Local', values: refs.locals.map((r) => item(r.full, r.name, 'local')) },
+          { title: 'Remote', values: refs.remotes.map((r) => item(r.full, r.name, 'remote')) },
+          { title: 'Tags', values: refs.tags.map((r) => item(r.full, r.name, 'tag')) }
+        ],
+        host.filter.branches ?? [],
+        (values) => host.apply({ branches: values })
+      )
+    },
+    () => host.apply({ branches: [] })
+  )
+
+  const user = filterButton(
+    'User',
+    (anchor) => {
+      const refs = host.refs
+      if (!refs) return
+      const me = refs.me
+      checklist(
+        anchor,
+        [
+          { values: me ? [{ value: me, label: `me (${me})` }] : [] },
+          { title: 'Users', values: refs.users.filter((u) => u !== me).map((u) => ({ value: u, label: u })) }
+        ],
+        host.filter.users ?? [],
+        (values) => host.apply({ users: values })
+      )
+    },
+    () => host.apply({ users: [] })
+  )
+
+  let dateLabel = ''
+  const date = filterButton(
+    'Date',
+    (anchor) => {
+      const now = Math.floor(Date.now() / 1000)
+      const preset = (label: string, days: number) =>
+        h(
+          'div',
+          {
+            class: `option${dateLabel === label ? ' checked' : ''}`,
+            onclick: () => {
+              dateLabel = label
+              close()
+              host.apply({ since: days ? now - days * DAY : undefined, until: undefined })
+            }
+          },
+          h('span', { class: 'check' }, icon('check')),
+          h('span', { class: 'label' }, label)
+        )
+      const toInput = (seconds?: number) => (seconds ? new Date(seconds * 1000).toISOString().slice(0, 10) : '')
+      const since = h('input', { class: 'field', type: 'date', value: toInput(host.filter.since) }) as HTMLInputElement
+      const until = h('input', { class: 'field', type: 'date', value: toInput(host.filter.until) }) as HTMLInputElement
+      const apply = h(
+        'button',
+        {
+          class: 'btn primary',
+          onclick: () => {
+            const from = since.value ? Math.floor(new Date(`${since.value}T00:00:00`).getTime() / 1000) : undefined
+            const to = until.value ? Math.floor(new Date(`${until.value}T23:59:59`).getTime() / 1000) : undefined
+            dateLabel = from && to ? `${since.value} – ${until.value}` : from ? `since ${since.value}` : to ? `until ${until.value}` : ''
+            close()
+            host.apply({ since: from, until: to })
+          }
+        },
+        'Apply'
+      )
+      const close = showPopover(
+        anchor,
+        h(
+          'div',
+          { style: 'min-width:240px' },
+          preset('Last 24 hours', 1),
+          preset('Last 7 days', 7),
+          preset('Last 30 days', 30),
+          h('div', { class: 'option-group' }, 'Select…'),
+          h('div', { style: 'display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center;padding:4px 8px' }, 'From', since, 'To', until),
+          h('div', { style: 'display:flex;justify-content:flex-end;padding:4px 8px' }, apply)
+        )
+      )
+    },
+    () => {
+      dateLabel = ''
+      host.apply({ since: undefined, until: undefined })
+    }
+  )
+
+  const paths = filterButton(
+    'Paths',
+    (anchor) => {
+      const area = h('textarea', { class: 'field mono', rows: 5, spellcheck: false, placeholder: 'One path per line, relative to the repository root' }) as HTMLTextAreaElement
+      area.value = (host.filter.paths ?? []).join('\n')
+      const submit = () => {
+        close()
+        host.apply({ paths: area.value.split(/\r?\n/).map((p) => p.trim()).filter(Boolean) })
+      }
+      area.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) submit()
+      })
+      const close = showPopover(
+        anchor,
+        h(
+          'div',
+          { style: 'display:flex;flex-direction:column;gap:6px;padding:4px;width:320px' },
+          area,
+          h('div', { style: 'display:flex;justify-content:flex-end' }, h('button', { class: 'btn primary', onclick: submit }, 'Apply'))
+        )
+      )
+    },
+    () => host.apply({ paths: [] })
+  )
+
+  return {
+    elements: [branch.el, user.el, date.el, paths.el],
+    /** Syncs the button labels with the current filter. */
+    update() {
+      const f = host.filter
+      const branches = (f.branches ?? []).map(shortRef)
+      branch.set(summary('Branch', branches), branches.length > 0)
+      user.set(summary('User', f.users ?? []), (f.users ?? []).length > 0)
+      if (!f.since && !f.until) dateLabel = ''
+      date.set(dateLabel ? `Date: ${dateLabel}` : 'Date', Boolean(f.since || f.until))
+      paths.set(summary('Paths', f.paths ?? []), (f.paths ?? []).length > 0)
+    }
+  }
+}

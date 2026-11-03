@@ -1,0 +1,61 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stablyai/orca/main/docs/schemas/plugins/orca-plugin.v2.schema.json",
+  "manifestVersion": 2,
+  "id": "git-log",
+  "name": "Git Log",
+  "version": "0.1.0",
+  "description": "IntelliJ-style Git log: commit graph, branches, filters and details, with multi-select squash, fixup, drop, reword, interactive rebase, cherry-pick, revert and reset from a right-click menu.",
+  "license": "MIT",
+  "repository": "https://github.com/emamalet/Orca-git-log-panel",
+  "engines": {
+    "orca": ">=1.4.248"
+  },
+  "execution": "trusted-worker",
+  "pluginApi": 1,
+  "main": "src/worker/main.ts",
+  "contributes": {
+    "panels": [
+      {
+        "id": "log",
+        "title": "Git Log",
+        "icon": "branch",
+        "entry": "src/ui/panel.html"
+      }
+    ],
+    "customEditors": [
+      {
+        "id": "log-tab",
+        "title": "Git Log",
+        "extensions": [".gitlog"],
+        "entry": "src/ui/editor.html"
+      }
+    ],
+    "commands": [
+      { "id": "open-tab", "title": "Git Log: Open in Editor Tab", "when": "workspace" }
+    ],
+    "settings": [
+      {
+        "key": "gitPath",
+        "title": "Git executable",
+        "description": "Path or name of the git binary used by the log.",
+        "type": "string",
+        "default": "git",
+        "maxLength": 1024
+      },
+      {
+        "key": "pageSize",
+        "title": "Commits per page",
+        "description": "How many commits are loaded at once while scrolling.",
+        "type": "integer",
+        "default": 300,
+        "minimum": 50,
+        "maximum": 2000
+      }
+    ]
+  },
+  "capabilities": [
+    { "kind": "workspace:read" },
+    { "kind": "workspace:write" },
+    { "kind": "settings:own" }
+  ]
+}
