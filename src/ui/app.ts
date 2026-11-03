@@ -52,6 +52,8 @@ let refs: RefsResult | null = null
 let rows: CommitRow[] = []
 let graph: GraphRow[] = []
 let reachable = new Set<string>()
+/** First-parent chain from HEAD within the loaded rows, newest first. */
+let mainline: CommitRow[] = []
 let indexByHash = new Map<string, number>()
 let hasMore = false
 let loading = false
@@ -222,6 +224,30 @@ function recompute(): void {
   indexByHash = new Map(rows.map((row, i) => [row.hash, i]))
   graph = computeGraph(rows, isFiltered())
   reachable = reachableFrom(repo?.head.hash ?? null, rows)
+  mainline = []
+  for (let i = indexByHash.get(repo?.head.hash ?? ''); i !== undefined; i = indexByHash.get(rows[i].parents[0] ?? '')) {
+    mainline.push(rows[i])
+  }
+}
+
+/** Why the selection can't be rewritten by a rebase from HEAD (mirrors the worker's checks), if it can't. */
+function rewriteBlocker(hashes: string[], fixupParent: boolean): string | undefined {
+  if (isFiltered()) return undefined
+  const position = new Map(mainline.map((row, i) => [row.hash, i]))
+  let oldest = -1
+  for (const hash of hashes) {
+    const i = position.get(hash)
+    if (i === undefined) {
+      return reachable.has(hash)
+        ? 'Commits of merged branches cannot be rewritten (not on the first-parent history of HEAD)'
+        : 'Only commits of the current branch can be rewritten'
+    }
+    oldest = Math.max(oldest, i)
+  }
+  if (fixupParent) oldest++
+  const merge = mainline.slice(0, oldest + 1).find((row) => row.parents.length > 1)
+  if (merge) return `History between HEAD and the selection contains the merge commit ${shortHash(merge.hash)}`
+  return undefined
 }
 
 function renderEmpty(): void {
@@ -845,17 +871,11 @@ function commitMenu(x: number, y: number): void {
   const commits = hashes.map((hash) => rows[indexByHash.get(hash)!])
   const n = hashes.length
   const single = n === 1 ? commits[0] : null
-  const onBranch = isFiltered() || hashes.every((hash) => reachable.has(hash))
   const merges = commits.some((c) => c.parents.length > 1)
   const operation = repo.operation
-  const rewriteHint = operation
-    ? `A ${operation} is in progress`
-    : !onBranch
-      ? 'Only commits of the current branch can be rewritten'
-      : merges
-        ? 'History with merge commits cannot be rewritten here'
-        : undefined
+  const rewriteHint = operation ? `A ${operation} is in progress` : rewriteBlocker(hashes, false)
   const rewriteOff = Boolean(rewriteHint)
+  const fixupHint = operation ? rewriteHint : rewriteBlocker(hashes, n === 1)
   const plural = n > 1 ? 's' : ''
 
   const entries: MenuEntry[] = [
@@ -904,7 +924,7 @@ function commitMenu(x: number, y: number): void {
     },
     'separator',
     { label: 'Edit Commit Message…', disabled: !single || rewriteOff, hint: rewriteHint ?? 'Select one commit', run: () => void reword(single!.hash) },
-    { label: n > 1 ? 'Fixup Commits' : 'Fixup into Previous', disabled: rewriteOff, hint: rewriteHint, run: () => void fixup(hashes) },
+    { label: n > 1 ? 'Fixup Commits' : 'Fixup into Previous', disabled: Boolean(fixupHint), hint: fixupHint, run: () => void fixup(hashes) },
     { label: 'Squash Commits…', disabled: n < 2 || rewriteOff, hint: rewriteHint ?? 'Select at least two commits', run: () => void squash(hashes) },
     { label: `Drop Commit${plural}`, disabled: rewriteOff, hint: rewriteHint, run: () => void drop(hashes) },
     {

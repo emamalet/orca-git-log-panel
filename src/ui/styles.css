@@ -662,7 +662,7 @@ textarea {
 
 @container log (max-width: 520px) {
   .columns {
-    grid-template-columns: minmax(0, 1fr) 0 var(--date-w, 96px) 0;
+    grid-template-columns: minmax(0, 1fr) 0 var(--date-w, 128px) 0;
   }
   .columns > .author {
     display: none;
