@@ -1,5 +1,5 @@
 :root {
-  --bg: var(--orca-background, #1e1f22);
+  --bg: var(--orca-card, var(--orca-background, #171717));
   --fg: var(--orca-foreground, #dfe1e5);
   --muted-fg: var(--orca-muted-foreground, #868a91);
   --muted: var(--orca-muted, #2b2d30);
