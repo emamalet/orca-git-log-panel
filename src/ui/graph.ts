@@ -1,4 +1,4 @@
-// Commit graph lanes, IntelliJ style: a branch keeps its lane and color; merges and forks draw
+// Commit graph lanes: a branch keeps its lane and color; merges and forks draw
 // diagonals between the node and neighbouring lanes. Lanes never shift sideways, so a line
 // passing through a row is one vertical segment.
 
@@ -63,7 +63,7 @@ export function computeGraph(rows: GraphInput[], linear = false): GraphRow[] {
     const outgoing: Segment[] = []
     row.parents.forEach((parent, index) => {
       // The first parent continues the node's lane even when another lane already waits for it:
-      // both lines then converge on the fork commit, as in IntelliJ.
+      // both lines then converge on the fork commit.
       const existing = index === 0 && lanes[lane] === null ? -1 : lanes.indexOf(parent)
       if (existing >= 0) {
         outgoing.push({ lane: existing, color: colors[existing] })

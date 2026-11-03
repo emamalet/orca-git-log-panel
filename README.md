@@ -1,8 +1,14 @@
 # Git Log for Orca
 
-An [Orca](https://www.onorca.dev) plugin that brings IntelliJ IDEA's **Git › Log** tool window to Orca:
+An [Orca](https://www.onorca.dev) plugin that adds a full **Git Log** view to Orca:
 a colored commit graph with branch and tag labels, author/date/hash columns, filters, a branch tree,
 a details pane, and a right-click menu to rewrite history on a multi-selection.
+
+![Git Log with a multi-selection and its context menu](images/log-dark.png)
+
+![Interactive rebase dialog](images/rebase-dark.png)
+
+![Light theme](images/log-light.png)
 
 ## Features
 

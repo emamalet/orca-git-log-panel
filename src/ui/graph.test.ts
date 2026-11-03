@@ -32,7 +32,7 @@ test('two branch tips get their own lanes, and freed lanes are reused', () => {
   assert.ok(graphSvg(graph[0], { head: true }).includes('class="node head c0"'))
 })
 
-test('IntelliJ relative dates', () => {
+test('relative dates', () => {
   const now = new Date(2026, 0, 15, 15, 0).getTime()
   const at = (d: Date) => d.getTime() / 1000
   assert.equal(relativeDate(at(new Date(2026, 0, 15, 14, 59, 40)), now), 'Moments ago')

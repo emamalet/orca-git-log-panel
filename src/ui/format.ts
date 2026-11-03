@@ -3,7 +3,7 @@ import type { BranchRef, CommitRow } from '../shared/protocol.ts'
 const pad = (n: number) => String(n).padStart(2, '0')
 const hhmm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`
 
-/** IntelliJ's log dates: "Moments ago", "5 minutes ago", "Today 14:02", "Yesterday 09:12", then the date. */
+/** Log dates: "Moments ago", "5 minutes ago", "Today 14:02", "Yesterday 09:12", then the date. */
 export function relativeDate(seconds: number, now = Date.now()): string {
   const date = new Date(seconds * 1000)
   const diff = Math.max(0, now - date.getTime())
@@ -34,7 +34,7 @@ export interface RefLabel {
 }
 
 /**
- * Turns a commit's full ref names into IntelliJ-style labels: a local branch and its remote
+ * Turns a commit's full ref names into compact labels: a local branch and its remote
  * counterparts on the same commit merge into "origin & main".
  */
 export function refLabels(refs: string[], currentBranch: string | null): RefLabel[] {
@@ -72,7 +72,7 @@ export function shortHash(hash: string): string {
   return hash.slice(0, 8)
 }
 
-/** Commits reachable from `head` among the loaded rows (the rest are greyed out like IntelliJ). */
+/** Commits reachable from `head` among the loaded rows (the rest are greyed out). */
 export function reachableFrom(head: string | null, rows: CommitRow[]): Set<string> {
   const reachable = new Set<string>()
   if (!head) return reachable

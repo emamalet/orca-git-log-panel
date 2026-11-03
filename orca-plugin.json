@@ -3,10 +3,15 @@
   "manifestVersion": 2,
   "id": "git-log",
   "name": "Git Log",
-  "version": "0.1.2",
-  "description": "IntelliJ-style Git log: commit graph, branches, filters and details, with multi-select squash, fixup, drop, reword, interactive rebase, cherry-pick, revert and reset from a right-click menu.",
+  "version": "0.1.3",
+  "description": "Git log: commit graph, branches, filters and details, with multi-select squash, fixup, drop, reword, interactive rebase, cherry-pick, revert and reset from a right-click menu.",
   "license": "MIT",
   "repository": "https://github.com/emamalet/Orca-git-log-panel",
+  "screenshots": [
+    { "path": "images/log-dark.png", "alt": "Commit log with three selected commits and the right-click menu open", "caption": "Multi-select commits and rewrite them from the context menu", "theme": "dark" },
+    { "path": "images/rebase-dark.png", "alt": "Interactive rebase dialog listing four commits with pick actions", "caption": "Interactive rebase: reorder, squash, fixup, reword or drop", "theme": "dark" },
+    { "path": "images/log-light.png", "alt": "Commit graph with branch tree and commit details in the light theme", "caption": "Commit graph, branch tree and details", "theme": "light" }
+  ],
   "engines": {
     "orca": ">=1.4.248"
   },

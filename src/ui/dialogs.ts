@@ -156,7 +156,7 @@ export async function askReset(branch: string | null, hash: string): Promise<Res
 
 const ACTIONS: RebaseAction[] = ['pick', 'reword', 'squash', 'fixup', 'drop']
 
-/** IntelliJ's "Interactively Rebase" dialog: oldest first; reorder, change actions, reword. */
+/** The "Interactively Rebase" dialog: oldest first; reorder, change actions, reword. */
 export async function askRebasePlan(commits: RangeCommit[], pushed: string[]): Promise<PlanItem[] | null> {
   const items = commits.map((c) => ({ ...c, action: 'pick' as RebaseAction, newMessage: c.message }))
   let selected = 0
