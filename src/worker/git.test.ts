@@ -7,6 +7,7 @@ import { after, test } from 'node:test'
 import { checkRewrite, runAction } from './actions.ts'
 import { createGit } from './git.ts'
 import { readDetails, readLogPage, readRefs } from './log.ts'
+import { readFileDiff } from './diff.ts'
 
 const dirs: string[] = []
 after(() => dirs.forEach((dir) => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })))
@@ -183,4 +184,36 @@ test('an empty repository has an empty log', async () => {
   dirs.push(root)
   sh(root, 'init', '-q')
   assert.deepEqual(await readLogPage(createGit(root), {}, 0, 10), { commits: [], hasMore: false })
+})
+
+test('file diff covers modified, renamed, binary and root-commit files with line numbers', async () => {
+  const { root, hashes } = repo(1)
+  const git = createGit(root)
+  const first = await readFileDiff(git, hashes[0], 'f1.txt')
+  assert.deepEqual(first.hunks.map((x) => x.lines), [[{ kind: '+', text: '1', new: 1 }]])
+
+  writeFileSync(join(root, 'f1.txt'), 'one\n2\n3\n4\n5\n6\n7\n8\nnine\n')
+  sh(root, 'commit', '-qam', 'edit')
+  const edit = await readFileDiff(git, sh(root, 'rev-parse', 'HEAD'), 'f1.txt')
+  assert.equal(edit.binary, false)
+  assert.deepEqual(edit.hunks[0].lines.slice(0, 3), [
+    { kind: '-', text: '1', old: 1 },
+    { kind: '+', text: 'one', new: 1 },
+    { kind: '+', text: '2', new: 2 }
+  ])
+  assert.deepEqual(edit.hunks.at(-1)!.lines.at(-1), { kind: '+', text: 'nine', new: 9 })
+  const whole = await readFileDiff(git, sh(root, 'rev-parse', 'HEAD'), 'f1.txt', undefined, true)
+  assert.equal(whole.hunks.length, 1)
+  assert.equal(whole.hunks[0].lines.length, 10)
+
+  sh(root, 'mv', 'f1.txt', 'renamed.txt')
+  sh(root, 'commit', '-qm', 'rename')
+  const renamed = await readFileDiff(git, sh(root, 'rev-parse', 'HEAD'), 'renamed.txt', 'f1.txt')
+  assert.deepEqual([renamed.oldPath, renamed.hunks.length, renamed.binary], ['f1.txt', 0, false])
+
+  writeFileSync(join(root, 'img.bin'), Buffer.from([0, 1, 2, 0, 255]))
+  sh(root, 'add', '.')
+  sh(root, 'commit', '-qm', 'binary')
+  assert.equal((await readFileDiff(git, sh(root, 'rev-parse', 'HEAD'), 'img.bin')).binary, true)
+  await assert.rejects(readFileDiff(git, 'HEAD', 'f1.txt'), /Invalid commit/)
 })

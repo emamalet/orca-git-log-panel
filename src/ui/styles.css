@@ -1147,3 +1147,188 @@ textarea.field {
   border: 1px solid var(--border);
   box-shadow: 0 6px 18px rgb(0 0 0 / 30%);
 }
+
+/* ---------- Diff viewer ---------- */
+
+.file.openable {
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 2px;
+  margin: 0 -2px;
+}
+
+.file.openable:hover {
+  background: var(--hover);
+}
+
+.file.openable:focus-visible {
+  outline: 1px solid var(--ring);
+}
+
+.diff-view {
+  --add-bg: color-mix(in srgb, var(--c1) 14%, var(--bg));
+  --add-word: color-mix(in srgb, var(--c1) 34%, var(--bg));
+  --del-bg: color-mix(in srgb, var(--c4) 14%, var(--bg));
+  --del-word: color-mix(in srgb, var(--c4) 34%, var(--bg));
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.diff-header {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 36px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.diff-header .spacer {
+  flex: 1;
+}
+
+.diff-header .sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--border);
+}
+
+.diff-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.diff-title .path {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+.diff-title .status-letter {
+  font-weight: 700;
+}
+
+.status-letter.st-A {
+  color: var(--c1);
+}
+
+.status-letter.st-D {
+  color: var(--c4);
+}
+
+.status-letter.st-M {
+  color: var(--c0);
+}
+
+.status-letter.st-R,
+.status-letter.st-C {
+  color: var(--c5);
+}
+
+.diff-body {
+  flex: 1;
+  overflow: auto;
+  outline: 0;
+  user-select: text;
+}
+
+.diff-note {
+  padding: 16px;
+}
+
+.diff-note.error {
+  color: var(--danger);
+}
+
+.diff-lines {
+  font: 12px/1.5 'JetBrains Mono', 'Cascadia Code', Consolas, ui-monospace, monospace;
+  tab-size: 4;
+  min-width: min-content;
+}
+
+.diff-lines .d-row {
+  display: grid;
+}
+
+.diff-lines.split .d-row {
+  grid-template-columns: var(--num-w) minmax(0, 1fr) var(--num-w) minmax(0, 1fr);
+}
+
+.diff-lines.unified .d-row {
+  grid-template-columns: var(--num-w) var(--num-w) minmax(0, 1fr);
+}
+
+.diff-lines .d-num {
+  padding: 0 6px;
+  text-align: right;
+  color: var(--muted-fg);
+  opacity: 0.8;
+  user-select: none;
+  background: color-mix(in srgb, var(--fg) 3%, var(--bg));
+}
+
+.diff-lines .d-num.add {
+  background: var(--add-bg);
+}
+
+.diff-lines .d-num.del {
+  background: var(--del-bg);
+}
+
+.diff-lines .d-code {
+  padding: 0 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.diff-lines.split .d-code:nth-child(2) {
+  border-right: 1px solid var(--border);
+}
+
+.diff-lines .d-code.add {
+  background: var(--add-bg);
+}
+
+.diff-lines .d-code.del {
+  background: var(--del-bg);
+}
+
+.diff-lines .d-code.d-empty {
+  background: repeating-linear-gradient(135deg, transparent 0 4px, color-mix(in srgb, var(--fg) 5%, transparent) 4px 5px);
+}
+
+.diff-lines .add .word {
+  background: var(--add-word);
+  border-radius: 2px;
+}
+
+.diff-lines .del .word {
+  background: var(--del-word);
+  border-radius: 2px;
+}
+
+.diff-lines .d-hunk {
+  padding: 2px 10px;
+  color: var(--muted-fg);
+  background: color-mix(in srgb, var(--c0) 9%, var(--bg));
+  border-block: 1px solid var(--border);
+  user-select: none;
+}
+
+.diff-lines .d-hunk .section {
+  margin-left: 12px;
+  color: var(--fg);
+  opacity: 0.75;
+}

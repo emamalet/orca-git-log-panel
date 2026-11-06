@@ -90,6 +90,33 @@ export interface CommitDetails {
 
 export type ResetMode = 'soft' | 'mixed' | 'hard' | 'keep'
 
+export interface DiffLine {
+  kind: ' ' | '+' | '-'
+  text: string
+  /** Line number in the old file (context and deletions). */
+  old?: number
+  /** Line number in the new file (context and additions). */
+  new?: number
+}
+
+export interface DiffHunk {
+  oldStart: number
+  newStart: number
+  /** Function or section name git printed after the hunk range. */
+  section: string
+  lines: DiffLine[]
+}
+
+/** One file's changes in a commit, against its first parent. */
+export interface FileDiff {
+  path: string
+  oldPath?: string
+  binary: boolean
+  /** The diff was cut short because it is too large. */
+  truncated: boolean
+  hunks: DiffHunk[]
+}
+
 export type RebaseAction = 'pick' | 'reword' | 'squash' | 'fixup' | 'drop'
 
 export interface PlanItem {
@@ -139,6 +166,7 @@ declare module 'orca' {
     'repo.watch': { input: { root: string }; output: { ok: boolean } }
     'log.page': { input: { root: string; filter: LogFilter; skip: number; limit?: number }; output: LogPage }
     'commit.details': { input: { root: string; hash: string }; output: CommitDetails }
+    'file.diff': { input: { root: string; hash: string; path: string; oldPath?: string; wholeFile?: boolean }; output: FileDiff }
     'action.check': { input: { root: string; kind: RewriteKind; hashes: string[] }; output: CheckResult }
     'action.run': { input: { root: string; action: ActionRequest }; output: ActionResult }
     'tab.open': { input: { workspaceId?: string }; output: { ok: boolean; reason?: string } }

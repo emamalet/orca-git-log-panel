@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { computeGraph, graphSvg } from './graph.ts'
 import { reachableFrom, refLabels, relativeDate } from './format.ts'
+import { changedRange, changeStarts, splitRows } from './diffmodel.ts'
 
 const row = (hash: string, ...parents: string[]) => ({ hash, parents })
 
@@ -53,4 +54,18 @@ test('ref labels merge a branch with its remote counterparts', () => {
 test('reachability follows parents from HEAD', () => {
   const rows = [row('x', 'a'), row('y', 'a'), row('a')].map((r) => ({ ...r, author: '', email: '', authorTime: 0, committer: '', commitTime: 0, subject: '', refs: [] }))
   assert.deepEqual([...reachableFrom('y', rows)].sort(), ['a', 'y'])
+})
+
+test('side-by-side rows pair deletions with additions and highlight the changed middle', () => {
+  const lines = [
+    { kind: ' ' as const, text: 'a', old: 1, new: 1 },
+    { kind: '-' as const, text: 'let x = 1', old: 2 },
+    { kind: '-' as const, text: 'gone', old: 3 },
+    { kind: '+' as const, text: 'let x = 42', new: 2 }
+  ]
+  const rows = splitRows({ oldStart: 1, newStart: 1, section: '', lines })
+  assert.deepEqual(rows, [{ left: lines[0], right: lines[0] }, { left: lines[1], right: lines[3] }, { left: lines[2], right: undefined }])
+  assert.deepEqual(changedRange('let x = 1', 'let x = 42'), [8, 9, 10])
+  assert.equal(changedRange('abc', 'xyz'), null)
+  assert.deepEqual(changeStarts([false, true, true, false, true], Boolean), [1, 4])
 })

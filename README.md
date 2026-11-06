@@ -2,9 +2,11 @@
 
 An [Orca](https://www.onorca.dev) plugin that adds a full **Git Log** view to Orca:
 a colored commit graph with branch and tag labels, author/date/hash columns, filters, a branch tree,
-a details pane, and a right-click menu to rewrite history on a multi-selection.
+a details pane with file diffs, and a right-click menu to rewrite history on a multi-selection.
 
 ![Git Log with a multi-selection and its context menu](images/log-dark.png)
+
+![Side-by-side diff of a changed file](images/diff-dark.png)
 
 ![Interactive rebase dialog](images/rebase-dark.png)
 
@@ -18,6 +20,10 @@ a details pane, and a right-click menu to rewrite history on a multi-selection.
 - **Branch tree**: Local, Remote and Tags; click a branch to jump to its commit, double-click to show
   only that branch, right-click to check it out.
 - **Details pane**: message, author, committer, refs, parents and changed files of the selected commit.
+- **Diff viewer**: double-click a changed file (or press Enter on it) to see what the commit changed,
+  side by side or unified, with changed words highlighted. Toggle **Whole file** for full context,
+  jump between changes with F7 / Shift+F7 and between files with Alt+↑ / Alt+↓; Esc closes it.
+  Merge commits are compared with their first parent.
 - **Multi-select**: click, Ctrl/⌘-click, Shift-click, arrows, Page Up/Down, Home/End, Ctrl+A.
 - **Right-click menu** (or Shift+F10):
   - Copy Revision Number (Ctrl+C), Cherry-Pick
@@ -65,7 +71,7 @@ a conflict it is aborted, and the branch is left exactly as it was.
 ## Limitations
 
 - Local workspaces only: SSH, WSL and paired-host workspaces are not supported yet.
-- No diff viewer: the details pane lists changed files but does not open diffs.
+- The diff viewer is read-only, and very large diffs are cut after 20,000 lines.
 - Conflicts during a rewrite, cherry-pick or revert are not resolved in the panel; the operation is
   aborted (or, when Git is left mid-operation by a terminal command, a banner says so).
 - When several workspaces share the same name and branch, the panel matches the focused one through

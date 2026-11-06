@@ -2,6 +2,7 @@ import type { ActionRequest, ActionResult, BranchRef, CommitRow, LogFilter, Refs
 import { api, copyText, errorMessage, orca } from './api.ts'
 import { renderBranches } from './branches.ts'
 import { renderDetails, renderMany, renderPlaceholder } from './details.ts'
+import { openDiff, type DiffMode } from './diff.ts'
 import { askName, askRebasePlan, askReset, busy, confirm, editMessage, pushedWarning } from './dialogs.ts'
 import { h, icon } from './dom.ts'
 import { createFilterBar } from './filters.ts'
@@ -23,6 +24,8 @@ interface Prefs {
   collapsed: string[]
   /** Workspace picked by the user, keyed by the ids of the same-named workspaces it was picked among. */
   picked: Record<string, string>
+  diffMode?: DiffMode
+  diffWholeFile?: boolean
 }
 
 const prefs: Prefs = {
@@ -754,7 +757,24 @@ function updateDetails(): void {
   detailsTimer = setTimeout(async () => {
     try {
       const details = await api.details(root, hashes[0])
-      if (token === detailsToken) renderDetails(detailsPane, details, { select: (hash) => void jumpTo(hash) })
+      if (token === detailsToken)
+        renderDetails(detailsPane, details, {
+          select: (hash) => void jumpTo(hash),
+          openDiff: (index) =>
+            openDiff({
+              root,
+              hash: details.hash,
+              files: details.files,
+              index,
+              mode: prefs.diffMode,
+              wholeFile: prefs.diffWholeFile,
+              onPrefs: (mode, wholeFile) => {
+                prefs.diffMode = mode
+                prefs.diffWholeFile = wholeFile
+                savePrefs()
+              }
+            })
+        })
     } catch (error) {
       if (token === detailsToken) renderPlaceholder(detailsPane, errorMessage(error))
     }

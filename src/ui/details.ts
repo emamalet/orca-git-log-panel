@@ -4,6 +4,8 @@ import { fullDate, shortHash, STATUS_NAMES } from './format.ts'
 
 export interface DetailsHost {
   select(hash: string): void
+  /** Shows the changes of `d.files[index]`. */
+  openDiff(index: number): void
 }
 
 export function renderPlaceholder(container: HTMLElement, text: string): void {
@@ -25,7 +27,7 @@ export function renderMany(container: HTMLElement, commits: CommitRow[]): void {
 export function renderDetails(container: HTMLElement, d: CommitDetails, host: DetailsHost): void {
   const [subject, ...rest] = d.message.split('\n')
   const body = rest.join('\n').replace(/^\s*\n/, '')
-  const files = d.files.map((f) => {
+  const files = d.files.map((f, index) => {
     const slash = f.path.lastIndexOf('/')
     const name = f.path.slice(slash + 1)
     const dir = slash >= 0 ? f.path.slice(0, slash) : ''
@@ -33,8 +35,15 @@ export function renderDetails(container: HTMLElement, d: CommitDetails, host: De
     return h(
       'div',
       {
-        class: `file st-${letter}`,
-        title: `${STATUS_NAMES[letter] ?? f.status}: ${f.oldPath ? `${f.oldPath} → ` : ''}${f.path}`
+        class: `file openable st-${letter}`,
+        tabindex: '0',
+        title: `${STATUS_NAMES[letter] ?? f.status}: ${f.oldPath ? `${f.oldPath} → ` : ''}${f.path}\nDouble-click to show the changes`,
+        ondblclick: () => host.openDiff(index),
+        onkeydown: (event: KeyboardEvent) => {
+          if (event.key !== 'Enter') return
+          event.preventDefault()
+          host.openDiff(index)
+        }
       },
       h('span', { class: 'status-letter' }, letter),
       icon('file'),

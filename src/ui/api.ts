@@ -4,6 +4,8 @@ import type {
   ActionResult,
   CheckResult,
   CommitDetails,
+  FileChange,
+  FileDiff,
   LogFilter,
   LogPage,
   RefsResult,
@@ -37,6 +39,8 @@ export const api = {
   page: (root: string, filter: LogFilter, skip: number, limit?: number): Promise<LogPage> =>
     orca.plugin.request('log.page', { root, filter, skip, ...(limit ? { limit } : {}) }, LONG),
   details: (root: string, hash: string): Promise<CommitDetails> => orca.plugin.request('commit.details', { root, hash }),
+  diff: (root: string, hash: string, file: FileChange, wholeFile: boolean): Promise<FileDiff> =>
+    orca.plugin.request('file.diff', { root, hash, path: file.path, ...(file.oldPath ? { oldPath: file.oldPath } : {}), wholeFile }, LONG),
   check: (root: string, kind: RewriteKind, hashes: string[]): Promise<CheckResult> =>
     orca.plugin.request('action.check', { root, kind, hashes }, LONG),
   run: (root: string, action: ActionRequest): Promise<ActionResult> => orca.plugin.request('action.run', { root, action }, LONG),
