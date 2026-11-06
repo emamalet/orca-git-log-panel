@@ -128,6 +128,28 @@ export async function askName(
   return result ? { name: input.value.trim(), checked: box?.checked ?? false } : null
 }
 
+export type PatchChoice = { action: 'copy' } | { action: 'save'; path: string }
+
+/** "Create Patch": a file path to save to, or copy to the clipboard when the patch is small enough. */
+export async function askPatch(count: number, size: number, defaultPath: string, canCopy: boolean): Promise<PatchChoice | null> {
+  const input = h('input', { class: 'field mono', spellcheck: false, placeholder: 'File path' }) as HTMLInputElement
+  input.value = defaultPath
+  const kb = size < 1024 ? `${size} B` : `${Math.round(size / 1024)} KB`
+  const result = await dialog<'copy' | 'save'>({
+    title: 'Create Patch',
+    body: [
+      `${count === 1 ? 'One commit' : `${count} commits`}, ${kb}. Save to a file (relative to the repository root) or copy to the clipboard.`,
+      input,
+      canCopy ? null : h('div', { class: 'muted' }, 'The patch is too large for the clipboard; save it to a file.')
+    ],
+    buttons: [cancel(), ...(canCopy ? [{ label: 'Copy to Clipboard', value: 'copy' as const }] : []), { label: 'Save', value: 'save', kind: 'primary' }],
+    focus: input,
+    validate: () => (input.value.trim() ? null : 'Enter a file path.')
+  })
+  if (!result) return null
+  return result === 'copy' ? { action: 'copy' } : { action: 'save', path: input.value.trim() }
+}
+
 const RESET_MODES: { mode: ResetMode; label: string; help: string }[] = [
   { mode: 'soft', label: 'Soft', help: 'Files and the index stay as they are; the reset changes become staged.' },
   { mode: 'mixed', label: 'Mixed', help: 'Files stay as they are; the index is reset, so the changes become unstaged.' },

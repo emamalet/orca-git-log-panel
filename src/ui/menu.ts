@@ -1,9 +1,10 @@
-import { h } from './dom.ts'
+import { h, icon, ICONS } from './dom.ts'
 
 export type MenuEntry =
   | 'separator'
   | {
       label: string
+      icon?: keyof typeof ICONS
       shortcut?: string
       disabled?: boolean
       /** Why it is disabled, shown as a tooltip. */
@@ -66,6 +67,7 @@ function open(el: HTMLElement, onClose?: () => void): () => void {
 export function showMenu(x: number, y: number, entries: MenuEntry[], restoreFocus?: HTMLElement): void {
   const items: { el: HTMLElement; entry: Exclude<MenuEntry, 'separator'> }[] = []
   const menu = h('div', { class: 'menu', role: 'menu', tabindex: -1 })
+  const withIcons = entries.some((entry) => entry !== 'separator' && entry.icon)
   let active = -1
   const setActive = (index: number) => {
     items[active]?.el.classList.remove('active')
@@ -96,6 +98,7 @@ export function showMenu(x: number, y: number, entries: MenuEntry[], restoreFocu
         onmouseleave: () => setActive(-1),
         onclick: () => choose(index)
       },
+      withIcons ? h('span', { class: 'menu-icon' }, entry.icon ? icon(entry.icon) : null) : null,
       h('span', { class: 'label' }, entry.label),
       entry.shortcut ? h('span', { class: 'shortcut' }, entry.shortcut) : null
     )

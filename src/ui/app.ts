@@ -3,7 +3,7 @@ import { api, copyText, errorMessage, orca } from './api.ts'
 import { renderBranches } from './branches.ts'
 import { renderDetails, renderMany, renderPlaceholder } from './details.ts'
 import { openDiff, type DiffMode } from './diff.ts'
-import { askName, askRebasePlan, askReset, busy, confirm, editMessage, pushedWarning } from './dialogs.ts'
+import { askName, askPatch, askRebasePlan, askReset, busy, confirm, editMessage, pushedWarning } from './dialogs.ts'
 import { h, icon } from './dom.ts'
 import { createFilterBar } from './filters.ts'
 import { reachableFrom, refLabels, relativeDate, fullDate, shortHash } from './format.ts'
@@ -577,19 +577,20 @@ function branchMenu(event: MouseEvent, ref: BranchRef & { kind: 'local' | 'remot
   const localName = ref.kind === 'remote' ? ref.name.slice(ref.name.indexOf('/') + 1) : ref.name
   const entries: MenuEntry[] = [
     ref.kind === 'local'
-      ? { label: 'Checkout', disabled: current, hint: 'Already checked out', run: () => void act({ kind: 'checkout', target: ref.name }, `Checking out ${ref.name}…`) }
+      ? { label: 'Checkout', icon: 'checkout', disabled: current, hint: 'Already checked out', run: () => void act({ kind: 'checkout', target: ref.name }, `Checking out ${ref.name}…`) }
       : ref.kind === 'remote'
         ? {
             label: `Checkout as '${localName}'`,
+            icon: 'checkout',
             disabled: Boolean(refs?.locals.some((l) => l.name === localName)),
             hint: `A local branch ${localName} already exists`,
             run: () => void act({ kind: 'checkout', target: localName }, `Checking out ${localName}…`)
           }
-        : { label: 'Checkout Revision', disabled: ref.kind === 'head', run: () => void act({ kind: 'checkout', target: ref.hash }, 'Checking out…') },
-    { label: `New Branch from '${ref.name}'…`, run: () => void newBranch(ref.hash) },
+        : { label: 'Checkout Revision', icon: 'checkout', disabled: ref.kind === 'head', run: () => void act({ kind: 'checkout', target: ref.hash }, 'Checking out…') },
+    { label: `New Branch from '${ref.name}'…`, icon: 'branch', run: () => void newBranch(ref.hash) },
     'separator',
-    { label: filter.branches?.includes(ref.full) ? 'Show All Branches' : `Show Only '${ref.name}'`, run: () => applyFilter({ branches: filter.branches?.includes(ref.full) ? [] : [ref.full] }) },
-    { label: 'Copy Name', run: () => copyText(ref.name) }
+    { icon: 'search', label: filter.branches?.includes(ref.full) ? 'Show All Branches' : `Show Only '${ref.name}'`, run: () => applyFilter({ branches: filter.branches?.includes(ref.full) ? [] : [ref.full] }) },
+    { label: 'Copy Name', icon: 'copy', run: () => copyText(ref.name) }
   ]
   showMenu(event.clientX, event.clientY, entries)
 }
@@ -885,6 +886,40 @@ async function reset(hash: string): Promise<void> {
   await act({ kind: 'reset', hash, mode }, 'Resetting…')
 }
 
+async function createPatch(hashes: string[]): Promise<void> {
+  if (!repo) return
+  const root = repo.root
+  const done = busy('Creating patch…')
+  let preview
+  try {
+    preview = await api.patch(root, hashes)
+  } catch (error) {
+    preview = { ok: false as const, reason: errorMessage(error) }
+  } finally {
+    done()
+  }
+  if (!preview.ok) return showBanner(preview.reason, 'error')
+  const choice = await askPatch(hashes.length, preview.size, preview.name, Boolean(preview.text))
+  if (!choice) return
+  if (choice.action === 'copy') {
+    if (copyText(preview.text!)) showBanner(`Copied the patch of ${hashes.length === 1 ? shortHash(hashes[0]) : `${hashes.length} commits`}.`, 'success')
+    else showBanner('Could not copy to the clipboard.', 'error')
+    return
+  }
+  try {
+    let saved = await api.patch(root, hashes, choice.path)
+    if (!saved.ok && saved.exists) {
+      if (!(await confirm('File Already Exists', `${saved.reason} Overwrite it?`, 'Overwrite', true))) return
+      saved = await api.patch(root, hashes, choice.path, true)
+    }
+    if (!saved.ok) return showBanner(saved.reason, 'error')
+    const path = saved.path!
+    showBanner(`Patch saved to ${path}.`, 'success', [{ label: 'Copy Path', run: () => void copyText(path) }])
+  } catch (error) {
+    showBanner(errorMessage(error), 'error')
+  }
+}
+
 function commitMenu(x: number, y: number): void {
   if (!repo) return
   const hashes = selectedHashes()
@@ -899,15 +934,23 @@ function commitMenu(x: number, y: number): void {
   const plural = n > 1 ? 's' : ''
 
   const entries: MenuEntry[] = [
-    { label: `Copy Revision Number${plural}`, shortcut: 'Ctrl+C', run: copyHashes },
+    { label: `Copy Revision Number${plural}`, icon: 'copy', shortcut: 'Ctrl+C', run: copyHashes },
     {
       label: 'Cherry-Pick',
+      icon: 'cherry',
       disabled: Boolean(operation) || (!isFiltered() && hashes.some((hash) => reachable.has(hash))) || merges,
       hint: operation ? `A ${operation} is in progress` : merges ? 'Merge commits cannot be cherry-picked here' : 'Already in the current branch',
       run: () => void act({ kind: 'cherryPick', hashes }, 'Cherry-picking…')
     },
+    {
+      label: 'Create Patch…',
+      icon: 'patch',
+      disabled: merges,
+      hint: 'Merge commits cannot be exported as a patch',
+      run: () => void createPatch(hashes)
+    },
     'separator',
-    { label: 'Checkout Revision', disabled: !single, hint: 'Select one commit', run: () => void act({ kind: 'checkout', target: single!.hash }, 'Checking out…') }
+    { label: 'Checkout Revision', icon: 'checkout', disabled: !single, hint: 'Select one commit', run: () => void act({ kind: 'checkout', target: single!.hash }, 'Checking out…') }
   ]
   if (single) {
     for (const label of refLabels(single.refs, repo.head.branch)) {
@@ -926,36 +969,40 @@ function commitMenu(x: number, y: number): void {
     'separator',
     {
       label: 'Reset Current Branch to Here…',
+      icon: 'reset',
       disabled: !single || Boolean(operation),
       hint: operation ? `A ${operation} is in progress` : 'Select one commit',
       run: () => void reset(single!.hash)
     },
     {
       label: `Revert Commit${plural}`,
+      icon: 'revert',
       disabled: Boolean(operation) || merges,
       hint: operation ? `A ${operation} is in progress` : 'Merge commits cannot be reverted here',
       run: () => void act({ kind: 'revert', hashes }, 'Reverting…')
     },
     {
       label: 'Undo Commit…',
+      icon: 'undo',
       disabled: !single || single.hash !== repo.head.hash || Boolean(operation),
       hint: 'Only the latest commit can be undone',
       run: () => void undoCommit(single!.hash)
     },
     'separator',
-    { label: 'Edit Commit Message…', disabled: !single || rewriteOff, hint: rewriteHint ?? 'Select one commit', run: () => void reword(single!.hash) },
-    { label: n > 1 ? 'Fixup Commits' : 'Fixup into Previous', disabled: Boolean(fixupHint), hint: fixupHint, run: () => void fixup(hashes) },
-    { label: 'Squash Commits…', disabled: n < 2 || rewriteOff, hint: rewriteHint ?? 'Select at least two commits', run: () => void squash(hashes) },
-    { label: `Drop Commit${plural}`, disabled: rewriteOff, hint: rewriteHint, run: () => void drop(hashes) },
+    { label: 'Edit Commit Message…', icon: 'edit', disabled: !single || rewriteOff, hint: rewriteHint ?? 'Select one commit', run: () => void reword(single!.hash) },
+    { label: n > 1 ? 'Fixup Commits' : 'Fixup into Previous', icon: 'fixup', disabled: Boolean(fixupHint), hint: fixupHint, run: () => void fixup(hashes) },
+    { label: 'Squash Commits…', icon: 'squash', disabled: n < 2 || rewriteOff, hint: rewriteHint ?? 'Select at least two commits', run: () => void squash(hashes) },
+    { label: `Drop Commit${plural}`, icon: 'drop', disabled: rewriteOff, hint: rewriteHint, run: () => void drop(hashes) },
     {
       label: 'Interactively Rebase from Here…',
+      icon: 'rebase',
       disabled: !single || rewriteOff,
       hint: rewriteHint ?? 'Select one commit',
       run: () => void rebaseFrom(single!.hash)
     },
     'separator',
-    { label: 'New Branch…', disabled: !single, hint: 'Select one commit', run: () => void newBranch(single!.hash) },
-    { label: 'New Tag…', disabled: !single, hint: 'Select one commit', run: () => void newTag(single!.hash) }
+    { label: 'New Branch…', icon: 'branch', disabled: !single, hint: 'Select one commit', run: () => void newBranch(single!.hash) },
+    { label: 'New Tag…', icon: 'tag', disabled: !single, hint: 'Select one commit', run: () => void newTag(single!.hash) }
   )
   showMenu(x, y, entries, viewport)
 }

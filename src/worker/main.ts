@@ -7,6 +7,7 @@ import { createGit, type Git } from './git.ts'
 import { readDetails, readLogPage, readRefs } from './log.ts'
 import { focusedWorkspace, resolveRepo, toplevel } from './repo.ts'
 import { readFileDiff } from './diff.ts'
+import { createPatch } from './patch.ts'
 import { watchRepo, type RepoWatcher } from './watch.ts'
 
 export const ANCHOR = '.orca-git-log.gitlog'
@@ -92,6 +93,10 @@ export default function activate(orca: OrcaWorkerApi): void {
 
   orca.panels.handle('file.diff', async ({ root, hash, path, oldPath, wholeFile }) =>
     readFileDiff(await gitFor(root), hash, path, oldPath, Boolean(wholeFile))
+  )
+
+  orca.panels.handle('patch.create', async ({ root, hashes, path, overwrite }) =>
+    createPatch(await gitFor(root), root, hashes, path, Boolean(overwrite))
   )
 
   orca.panels.handle('action.check', async ({ root, kind, hashes }) => checkRewrite(await gitFor(root), kind, hashes))

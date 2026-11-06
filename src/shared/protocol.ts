@@ -159,6 +159,10 @@ export interface ActionResult {
   previousHead?: string
 }
 
+export type PatchResult =
+  | { ok: true; name: string; size: number; text?: string; tooLarge?: boolean; path?: string }
+  | { ok: false; reason: string; exists?: boolean }
+
 declare module 'orca' {
   interface PluginRequests {
     'repo.resolve': { input: { root?: string; workspaceId?: string }; output: RepoResult }
@@ -167,6 +171,7 @@ declare module 'orca' {
     'log.page': { input: { root: string; filter: LogFilter; skip: number; limit?: number }; output: LogPage }
     'commit.details': { input: { root: string; hash: string }; output: CommitDetails }
     'file.diff': { input: { root: string; hash: string; path: string; oldPath?: string; wholeFile?: boolean }; output: FileDiff }
+    'patch.create': { input: { root: string; hashes: string[]; path?: string; overwrite?: boolean }; output: PatchResult }
     'action.check': { input: { root: string; kind: RewriteKind; hashes: string[] }; output: CheckResult }
     'action.run': { input: { root: string; action: ActionRequest }; output: ActionResult }
     'tab.open': { input: { workspaceId?: string }; output: { ok: boolean; reason?: string } }

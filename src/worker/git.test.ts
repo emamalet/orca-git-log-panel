@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
@@ -8,6 +8,7 @@ import { checkRewrite, runAction } from './actions.ts'
 import { createGit } from './git.ts'
 import { readDetails, readLogPage, readRefs } from './log.ts'
 import { readFileDiff } from './diff.ts'
+import { createPatch } from './patch.ts'
 
 const dirs: string[] = []
 after(() => dirs.forEach((dir) => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })))
@@ -216,4 +217,29 @@ test('file diff covers modified, renamed, binary and root-commit files with line
   sh(root, 'commit', '-qm', 'binary')
   assert.equal((await readFileDiff(git, sh(root, 'rev-parse', 'HEAD'), 'img.bin')).binary, true)
   await assert.rejects(readFileDiff(git, 'HEAD', 'f1.txt'), /Invalid commit/)
+})
+
+test('create patch exports the selected commits oldest first, applies cleanly and refuses overwrites', async () => {
+  const { root, hashes } = repo(4)
+  const git = createGit(root)
+  const preview = await createPatch(git, root, [hashes[3], hashes[1]])
+  assert.ok(preview.ok && preview.text)
+  assert.equal(preview.name, '2-commits.patch')
+  const text = preview.text!
+  assert.ok(text.indexOf('Subject: [PATCH] c2') < text.indexOf('Subject: [PATCH] c4'))
+  assert.ok(!text.includes('Subject: [PATCH] c3'))
+
+  const single = await createPatch(git, root, [hashes[0]])
+  assert.equal(single.ok && single.name, 'c1.patch')
+
+  const saved = await createPatch(git, root, [hashes[3]], 'out/last.patch')
+  assert.ok(saved.ok && saved.path && existsSync(saved.path))
+  sh(root, 'reset', '-q', '--hard', hashes[2])
+  sh(root, 'apply', '--check', saved.path!)
+  assert.match(readFileSync(saved.path!, 'utf8'), /^From [0-9a-f]{40} /)
+
+  const again = await createPatch(git, root, [hashes[3]], 'out/last.patch')
+  assert.deepEqual([again.ok, !again.ok && again.exists], [false, true])
+  assert.equal((await createPatch(git, root, [hashes[3]], 'out/last.patch', true)).ok, true)
+  await assert.rejects(createPatch(git, root, ['HEAD']), /Invalid commit/)
 })

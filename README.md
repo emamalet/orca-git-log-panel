@@ -25,8 +25,9 @@ a details pane with file diffs, and a right-click menu to rewrite history on a m
   jump between changes with F7 / Shift+F7 and between files with Alt+↑ / Alt+↓; Esc closes it.
   Merge commits are compared with their first parent.
 - **Multi-select**: click, Ctrl/⌘-click, Shift-click, arrows, Page Up/Down, Home/End, Ctrl+A.
-- **Right-click menu** (or Shift+F10):
-  - Copy Revision Number (Ctrl+C), Cherry-Pick
+- **Right-click menu** with icons (or Shift+F10):
+  - Copy Revision Number (Ctrl+C), Cherry-Pick, Create Patch… (`git format-patch` of the selection,
+    oldest first, saved to a file or copied to the clipboard)
   - Checkout Revision, checkout a branch at that commit, check out a remote branch as local
   - Reset Current Branch to Here… (soft / mixed / hard / keep), Revert Commits, Undo Commit
   - Edit Commit Message…, Fixup, Squash Commits…, Drop Commits, Interactively Rebase from Here…
