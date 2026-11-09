@@ -1,5 +1,7 @@
 # Git Log for Orca
 
+![Git Log for Orca: commit graph and right-click menu to squash, fixup or drop commits](images/cover.png)
+
 An [Orca](https://www.onorca.dev) plugin that adds a full **Git Log** view to Orca:
 a colored commit graph with branch and tag labels, author/date/hash columns, filters, a branch tree,
 a details pane with file diffs, and a right-click menu to rewrite history on a multi-selection.
