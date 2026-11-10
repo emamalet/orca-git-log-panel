@@ -28,7 +28,13 @@ export function lastLines(text: string, count = 6): string {
   return text.trim().split(/\r?\n/).slice(-count).join('\n')
 }
 
+/** `\\wsl.localhost\<distro>\...` or `\\wsl$\<distro>\...`, a WSL file system seen from Windows. */
+export const isWslPath = (path: string) => /^[\\/]{2}wsl(\.localhost|\$)[\\/]/i.test(path)
+
 export function createGit(root: string, gitPath = 'git'): Git {
+  // Git for Windows sees WSL files as owned by someone else and refuses them ("dubious ownership").
+  // Set through the environment so git processes started by git itself (rebase exec) inherit it.
+  const trust = isWslPath(root) ? { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'safe.directory', GIT_CONFIG_VALUE_0: '*' } : {}
   const run = (args: string[], options: GitOptions = {}) =>
     new Promise<GitResult>((resolve) => {
       execFile(
@@ -36,7 +42,7 @@ export function createGit(root: string, gitPath = 'git'): Git {
         ['-c', 'core.quotepath=off', '-c', 'color.ui=false', '-c', 'log.showSignature=false', ...args],
         {
           cwd: root,
-          env: { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C', ...options.env },
+          env: { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C', ...trust, ...options.env },
           maxBuffer: 64 * 1024 * 1024,
           timeout: options.timeoutMs ?? 60_000,
           windowsHide: true

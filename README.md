@@ -73,7 +73,8 @@ a conflict it is aborted, and the branch is left exactly as it was.
 
 ## Limitations
 
-- Local workspaces only: SSH, WSL and paired-host workspaces are not supported yet.
+- Local workspaces only: SSH and paired-host workspaces are not supported yet. WSL folders opened from
+  Windows (`\\wsl.localhost\...`) work through Git for Windows, which is slower there than inside WSL.
 - The diff viewer is read-only, and very large diffs are cut after 20,000 lines.
 - Conflicts during a rewrite, cherry-pick or revert are not resolved in the panel; the operation is
   aborted (or, when Git is left mid-operation by a terminal command, a banner says so).

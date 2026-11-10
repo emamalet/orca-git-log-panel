@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { assert, mockHost, mountWorker, test } from 'orca/testing'
 import * as main from './main.ts'
-import { matchWorkspace } from './repo.ts'
+import { matchWorkspace, mentions } from './repo.ts'
 
 const sh = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 
@@ -116,4 +116,12 @@ test('same-named workspaces are told apart by terminal titles, then by a previou
     rmSync(`${a}-sibling`, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     rmSync(b, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   }
+})
+
+test('terminal titles from a WSL shell name WSL workspaces by their Linux path', () => {
+  const repo = '//wsl.localhost/ubuntu/home/me/xerox/tnr-auto'
+  assert.ok(mentions('me@pc: ~/xerox/tnr-auto', repo))
+  assert.ok(mentions('me@pc: /home/me/xerox/tnr-auto', repo))
+  assert.ok(mentions('vim', '//wsl$/ubuntu/home/me/xerox/tnr-auto') === false)
+  assert.ok(!mentions('me@pc: ~/xerox/tnr-auto-2', repo))
 })

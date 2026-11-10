@@ -32,10 +32,17 @@ const slashes = (path: string) => path.replace(/\\/g, '/').replace(/\/+$/, '').t
 const isLocal = (w: ListedWorkspace) => (!w.hostId || w.hostId === 'local') && existsSync(w.path)
 
 /** True when `text` names `path` (Windows or MSYS spelling), not just a longer sibling path. */
-function mentions(text: string, path: string): boolean {
+export function mentions(text: string, path: string): boolean {
   const forms = [path]
   const drive = /^([a-z]):(\/.*)?$/.exec(path)
   if (drive) forms.push(`/${drive[1]}${drive[2] ?? ''}`)
+  // A WSL shell shows `/home/me/repo` or `~/repo` for `\\wsl.localhost\<distro>\home\me\repo`.
+  const wsl = /^\/\/wsl(?:\.localhost|\$)\/[^/]+(\/.*)$/.exec(path)
+  if (wsl) {
+    forms.push(wsl[1])
+    const home = /^\/(?:home\/[^/]+|root)(\/.*)$/.exec(wsl[1])
+    if (home) forms.push(`~${home[1]}`)
+  }
   for (const form of forms) {
     for (let at = text.indexOf(form); at >= 0; at = text.indexOf(form, at + 1)) {
       if (!/[\w.-]/.test(text[at + form.length] ?? '')) return true
@@ -81,7 +88,7 @@ export async function focusedWorkspace(
   if ('ambiguous' in match) {
     return {
       reason: `Several workspaces are named "${context.displayName}". Pick the one you are in:`,
-      choices: match.ambiguous.map(({ id, name, path, branch }) => ({ id, name, path, branch: shortBranch(branch) }))
+      choices: match.ambiguous.map(({ id, name, path, branch }) => ({ id, name, path: path.replace(/(.)[\\/]+$/, '$1'), branch: shortBranch(branch) }))
     }
   }
   lastChoice = match.workspace.id
