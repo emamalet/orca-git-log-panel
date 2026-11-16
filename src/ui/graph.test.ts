@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import { computeGraph, graphSvg } from './graph.ts'
 import { reachableFrom, refLabels, relativeDate } from './format.ts'
 import { changedRange, changeStarts, splitRows } from './diffmodel.ts'
+import { buildFileTree } from './filetree.ts'
 
 const row = (hash: string, ...parents: string[]) => ({ hash, parents })
 
@@ -68,4 +69,10 @@ test('side-by-side rows pair deletions with additions and highlight the changed 
   assert.deepEqual(changedRange('let x = 1', 'let x = 42'), [8, 9, 10])
   assert.equal(changedRange('abc', 'xyz'), null)
   assert.deepEqual(changeStarts([false, true, true, false, true], Boolean), [1, 4])
+})
+
+test('changed files group into folders, joining single-child folder chains', () => {
+  const tree = buildFileTree(['app/core/src/main/java/A.java', 'app/core/src/main/resources/META-INF/x', 'app/core/src/test/java/ATest.java', 'README.md'])
+  const names = (d: typeof tree): unknown => [d.name, d.count, d.dirs.map(names), d.files]
+  assert.deepEqual(names(tree), ['', 4, [['app/core/src', 3, [['main', 2, [['java', 1, [], [0]], ['resources/META-INF', 1, [], [1]]], []], ['test/java', 1, [], [2]]], []]], [3]])
 })

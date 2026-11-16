@@ -21,10 +21,12 @@ a details pane with file diffs, and a right-click menu to rewrite history on a m
 - **Filters**: text or hash (with regex `.*` and match case `Cc`), Branch, User, Date and Paths.
 - **Branch tree**: Local, Remote and Tags; click a branch to jump to its commit, double-click to show
   only that branch, right-click to check it out.
-- **Details pane**: message, author, committer, refs, parents and changed files of the selected commit.
-- **Diff viewer**: double-click a changed file (or press Enter on it) to see what the commit changed,
-  side by side or unified, with changed words highlighted. Toggle **Whole file** for full context,
-  jump between changes with F7 / Shift+F7 and between files with Alt+↑ / Alt+↓; Esc closes it.
+- **Details pane**: message, author, committer, refs and parents of the selected commit, and its changed
+  files as a folder tree (single-child folders joined, file counts, fold/unfold, expand/collapse all).
+- **Diff viewer**: double-click a changed file (or press Enter on it) to open what the commit changed
+  in its own editor tab, side by side or unified, with changed words highlighted. Toggle **Whole file** for full context,
+  jump between changes with F7 / Shift+F7 and between files with Alt+↑ / Alt+↓. Where a tab cannot open
+  (no local workspace), it shows over the log instead and Esc closes it.
   Merge commits are compared with their first parent.
 - **Multi-select**: click, Ctrl/⌘-click, Shift-click, arrows, Page Up/Down, Home/End, Ctrl+A.
 - **Right-click menu** with icons (or Shift+F10):
@@ -44,7 +46,8 @@ a details pane with file diffs, and a right-click menu to rewrite history on a m
 - **Editor tab**: run **Git Log: Open in Editor Tab** from the command palette (or click the ↗ button
   in the panel) for the full-width layout with the branch tree. It opens a small anchor file,
   `.orca-git-log.gitlog`, at the workspace root; the plugin adds it to `.git/info/exclude` so it never
-  shows up as untracked.
+  shows up as untracked. Diff tabs open similar files from a .orca-git-log/ folder (the newest 40
+  are kept), excluded the same way.
 
 ## Install
 

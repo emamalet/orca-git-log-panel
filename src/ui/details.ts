@@ -1,6 +1,11 @@
 import type { CommitDetails, CommitRow } from '../shared/protocol.ts'
 import { h, icon } from './dom.ts'
+import { buildFileTree, type DirNode } from './filetree.ts'
 import { fullDate, shortHash, STATUS_NAMES } from './format.ts'
+
+const INDENT = 16
+/** Folders the user folded, by path; kept while moving between commits. */
+const foldedDirs = new Set<string>()
 
 export interface DetailsHost {
   select(hash: string): void
@@ -27,15 +32,14 @@ export function renderMany(container: HTMLElement, commits: CommitRow[]): void {
 export function renderDetails(container: HTMLElement, d: CommitDetails, host: DetailsHost): void {
   const [subject, ...rest] = d.message.split('\n')
   const body = rest.join('\n').replace(/^\s*\n/, '')
-  const files = d.files.map((f, index) => {
-    const slash = f.path.lastIndexOf('/')
-    const name = f.path.slice(slash + 1)
-    const dir = slash >= 0 ? f.path.slice(0, slash) : ''
+  const fileRow = (index: number, depth: number) => {
+    const f = d.files[index]
     const letter = f.status[0] ?? 'M'
     return h(
       'div',
       {
         class: `file openable st-${letter}`,
+        style: `padding-left:${depth * INDENT + 18}px`,
         tabindex: '0',
         title: `${STATUS_NAMES[letter] ?? f.status}: ${f.oldPath ? `${f.oldPath} → ` : ''}${f.path}\nDouble-click to show the changes`,
         ondblclick: () => host.openDiff(index),
@@ -45,12 +49,56 @@ export function renderDetails(container: HTMLElement, d: CommitDetails, host: De
           host.openDiff(index)
         }
       },
-      h('span', { class: 'status-letter' }, letter),
       icon('file'),
-      h('span', { class: 'name' }, name),
-      dir ? h('span', { class: 'dir' }, dir) : null
+      h('span', { class: 'name' }, f.path.slice(f.path.lastIndexOf('/') + 1)),
+      h('span', { class: 'status-letter' }, letter)
     )
-  })
+  }
+  const folders: { path: string; row: HTMLElement; children: HTMLElement }[] = []
+  const setFolded = (folder: (typeof folders)[number], folded: boolean) => {
+    if (folded) foldedDirs.add(folder.path)
+    else foldedDirs.delete(folder.path)
+    folder.row.classList.toggle('folded', folded)
+    folder.row.setAttribute('aria-expanded', String(!folded))
+    folder.children.hidden = folded
+  }
+  const renderDir = (dir: DirNode, depth: number): HTMLElement[] => [
+    ...dir.dirs.map((sub) => {
+      const children = h('div', { class: 'dir-children' }, ...renderDir(sub, depth + 1))
+      const row = h(
+        'div',
+        { class: 'file folder', style: `padding-left:${depth * INDENT}px`, tabindex: '0', title: sub.path },
+        icon('chevronDown', 'twisty'),
+        icon('folder'),
+        h('span', { class: 'name' }, sub.name),
+        h('span', { class: 'count' }, `${sub.count} file${sub.count === 1 ? '' : 's'}`)
+      )
+      const folder = { path: sub.path, row, children }
+      folders.push(folder)
+      const toggle = () => setFolded(folder, !foldedDirs.has(sub.path))
+      row.addEventListener('click', toggle)
+      row.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') toggle()
+        else if (event.key === 'ArrowLeft') setFolded(folder, true)
+        else if (event.key === 'ArrowRight') setFolded(folder, false)
+        else return
+        event.preventDefault()
+      })
+      setFolded(folder, foldedDirs.has(sub.path))
+      return h('div', null, row, children)
+    }),
+    ...dir.files.map((index) => fileRow(index, depth))
+  ]
+  const files = renderDir(buildFileTree(d.files.map((f) => f.path)), 0)
+  const foldAll = (folded: boolean) => folders.forEach((folder) => setFolded(folder, folded))
+  const treeTools = folders.length
+    ? h(
+        'span',
+        { class: 'files-tools' },
+        h('button', { class: 'tool', title: 'Expand all', 'aria-label': 'Expand all', onclick: () => foldAll(false) }, icon('expandAll')),
+        h('button', { class: 'tool', title: 'Collapse all', 'aria-label': 'Collapse all', onclick: () => foldAll(true) }, icon('collapseAll'))
+      )
+    : null
   const parents = d.parents.map((p, i) =>
     h('span', null, i ? ', ' : '', h('a', { class: 'hash-link mono', title: p, onclick: () => host.select(p) }, shortHash(p)))
   )
@@ -58,7 +106,13 @@ export function renderDetails(container: HTMLElement, d: CommitDetails, host: De
     h(
       'div',
       { class: 'section' },
-      h('div', { class: 'files-title' }, `${d.files.length} file${d.files.length === 1 ? '' : 's'} changed`, d.parents.length > 1 ? h('span', { class: 'muted' }, '(vs. first parent)') : null),
+      h(
+        'div',
+        { class: 'files-title' },
+        `${d.files.length} file${d.files.length === 1 ? '' : 's'} changed`,
+        d.parents.length > 1 ? h('span', { class: 'muted' }, '(vs. first parent)') : null,
+        treeTools
+      ),
       ...(files.length ? files : [h('div', { class: 'muted' }, 'No changes')])
     ),
     h(

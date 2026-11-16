@@ -5,8 +5,9 @@ import type { RepoResult } from '../shared/protocol.ts'
 import { checkRewrite, runAction } from './actions.ts'
 import { createGit, type Git } from './git.ts'
 import { readDetails, readLogPage, readRefs } from './log.ts'
-import { focusedWorkspace, resolveRepo, toplevel } from './repo.ts'
+import { focusedWorkspace, resolveRepo, toplevel, type ListedWorkspace, type Workspace } from './repo.ts'
 import { readFileDiff } from './diff.ts'
+import { DIFF_DIR, pickWorkspace, validDiffRequest, writeDiffAnchor } from './difftab.ts'
 import { createPatch } from './patch.ts'
 import { watchRepo, type RepoWatcher } from './watch.ts'
 
@@ -108,6 +109,22 @@ export default function activate(orca: OrcaWorkerApi): void {
   })
 
   orca.panels.handle('tab.open', (input) => openTab(input?.workspaceId))
+
+  orca.panels.handle('diff.openTab', async (input) => {
+    const req = validDiffRequest(input)
+    const git = await gitFor(req.root)
+    const { workspaces } = (await orca.host.call('workspace.list', {})) as { workspaces: ListedWorkspace[] }
+    let workspace: Workspace | null = pickWorkspace(workspaces, req.root, req.workspaceId)
+    if (!workspace) {
+      const focused = await focusedWorkspace(orca, req.workspaceId)
+      if ('reason' in focused) return { ok: false, reason: focused.reason }
+      workspace = focused
+    }
+    const path = writeDiffAnchor(workspace.path, req)
+    await exclude(git, req.root, `${DIFF_DIR}/`)
+    await orca.host.call('editor.open', { workspaceId: workspace.id, path })
+    return { ok: true }
+  })
 
   orca.commands.register('open-tab', async () => {
     const result = await openTab()

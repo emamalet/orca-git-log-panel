@@ -9,6 +9,7 @@ import { createGit } from './git.ts'
 import { readDetails, readLogPage, readRefs } from './log.ts'
 import { readFileDiff } from './diff.ts'
 import { createPatch } from './patch.ts'
+import { diffAnchorName, pickWorkspace, validDiffRequest, writeDiffAnchor } from './difftab.ts'
 
 const dirs: string[] = []
 after(() => dirs.forEach((dir) => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })))
@@ -242,4 +243,21 @@ test('create patch exports the selected commits oldest first, applies cleanly an
   assert.deepEqual([again.ok, !again.ok && again.exists], [false, true])
   assert.equal((await createPatch(git, root, [hashes[3]], 'out/last.patch', true)).ok, true)
   await assert.rejects(createPatch(git, root, ['HEAD']), /Invalid commit/)
+})
+test('diff tab anchors are named after the file and commit, with the folder when names clash', () => {
+  const files = [{ status: 'M', path: 'src/ui/index.ts' }, { status: 'A', path: 'src/worker/index.ts' }, { status: 'M', path: 'a:b?.txt' }]
+  assert.equal(diffAnchorName(files, 0, '0123456789abcdef'), 'index.ts (ui) @01234567.gitdiff')
+  assert.equal(diffAnchorName(files, 2, '0123456789abcdef'), 'a_b_.txt @01234567.gitdiff')
+  const dir = mkdtempSync(join(tmpdir(), 'gitlog-ws-'))
+  const workspaces = [
+    { id: 'other', name: 'x', path: tmpdir(), branch: null, hostId: null },
+    { id: 'ws', name: 'x', path: dir, branch: null, hostId: null }
+  ]
+  assert.equal(pickWorkspace(workspaces, dir)?.id, 'ws')
+  assert.equal(pickWorkspace(workspaces, dir, 'other')?.id, 'ws')
+  const path = writeDiffAnchor(dir, { root: dir, hash: '0123456789abcdef', files, index: 1, workspaceId: 'ws' })
+  assert.equal(path, '.orca-git-log/index.ts (worker) @01234567.gitdiff')
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, path), 'utf8')), { root: dir, hash: '0123456789abcdef', files, index: 1 })
+  assert.throws(() => validDiffRequest({ root: dir, hash: 'zz', files, index: 0 }))
+  rmSync(dir, { recursive: true, force: true })
 })

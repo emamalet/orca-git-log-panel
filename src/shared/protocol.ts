@@ -163,6 +163,15 @@ export type PatchResult =
   | { ok: true; name: string; size: number; text?: string; tooLarge?: boolean; path?: string }
   | { ok: false; reason: string; exists?: boolean }
 
+/** What a diff tab shows: `files[index]` of commit `hash`; it can step through the other files. */
+export interface DiffTabRequest {
+  root: string
+  hash: string
+  files: FileChange[]
+  index: number
+  workspaceId?: string
+}
+
 declare module 'orca' {
   interface PluginRequests {
     'repo.resolve': { input: { root?: string; workspaceId?: string }; output: RepoResult }
@@ -175,6 +184,7 @@ declare module 'orca' {
     'action.check': { input: { root: string; kind: RewriteKind; hashes: string[] }; output: CheckResult }
     'action.run': { input: { root: string; action: ActionRequest }; output: ActionResult }
     'tab.open': { input: { workspaceId?: string }; output: { ok: boolean; reason?: string } }
+    'diff.openTab': { input: DiffTabRequest; output: { ok: boolean; reason?: string } }
   }
   interface PluginPanelEvents {
     'repo.changed': { root: string }

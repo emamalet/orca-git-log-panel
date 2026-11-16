@@ -3,7 +3,7 @@
   "manifestVersion": 2,
   "id": "git-log",
   "name": "Git Log",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Git log: commit graph, branches, filters, details and file diffs, with multi-select squash, fixup, drop, reword, interactive rebase, cherry-pick, revert and reset from a right-click menu.",
   "license": "MIT",
   "repository": "https://github.com/emamalet/Orca-git-log-panel",
@@ -26,7 +26,7 @@
       {
         "id": "log",
         "title": "Git Log",
-        "icon": "activity",
+        "icon": "branch",
         "entry": "src/ui/panel.html"
       }
     ],
@@ -36,6 +36,12 @@
         "title": "Git Log",
         "extensions": [".gitlog"],
         "entry": "src/ui/editor.html"
+      },
+      {
+        "id": "diff-tab",
+        "title": "Git Diff",
+        "extensions": [".gitdiff"],
+        "entry": "src/ui/diff.html"
       }
     ],
     "commands": [

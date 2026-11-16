@@ -16,6 +16,8 @@ export interface DiffOptions {
   wholeFile?: boolean
   /** Called when the user switches layout or context, to remember it. */
   onPrefs?(mode: DiffMode, wholeFile: boolean): void
+  /** Fills the page of its own editor tab: no close button, Escape does nothing. */
+  embedded?: boolean
 }
 
 let closeOpen: (() => void) | null = null
@@ -120,7 +122,7 @@ export function openDiff(options: DiffOptions): void {
       h('span', { class: 'sep' }),
       modeButton,
       wholeButton,
-      button('close', 'Close (Esc)', () => close())
+      options.embedded ? null : button('close', 'Close (Esc)', () => close())
     ),
     body
   )
@@ -134,6 +136,7 @@ export function openDiff(options: DiffOptions): void {
       h('span', { class: 'mono muted' }, shortHash(hash))
     )
     counter.textContent = `${index + 1}/${files.length}`
+    if (options.embedded) document.title = `${file.path.slice(file.path.lastIndexOf('/') + 1)} @${shortHash(hash)}`
     prevFile.disabled = index === 0
     nextFile.disabled = index === files.length - 1
     modeButton.textContent = mode === 'split' ? 'Side-by-side' : 'Unified'
@@ -209,7 +212,7 @@ export function openDiff(options: DiffOptions): void {
   }
 
   function onKey(event: KeyboardEvent): void {
-    if (event.key === 'Escape') close()
+    if (event.key === 'Escape' && !options.embedded) close()
     else if (event.altKey && event.key === 'ArrowUp') go(index - 1)
     else if (event.altKey && event.key === 'ArrowDown') go(index + 1)
     else if (event.key === 'F7') jump(event.shiftKey ? -1 : 1)

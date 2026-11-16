@@ -1,4 +1,4 @@
-import type { ActionRequest, ActionResult, BranchRef, CommitRow, LogFilter, RefsResult, RepoInfo, RepoResult, RewriteKind, WorkspaceChoice } from '../shared/protocol.ts'
+import type { ActionRequest, ActionResult, BranchRef, CommitDetails, CommitRow, LogFilter, RefsResult, RepoInfo, RepoResult, RewriteKind, WorkspaceChoice } from '../shared/protocol.ts'
 import { api, copyText, errorMessage, orca } from './api.ts'
 import { renderBranches } from './branches.ts'
 import { renderDetails, renderMany, renderPlaceholder } from './details.ts'
@@ -63,6 +63,8 @@ let loading = false
 let loadToken = 0
 let loadError: string | null = null
 let choices: WorkspaceChoice[] = []
+/** Workspace named by the editor tab's document, whose repo has no focused workspace id. */
+let docWorkspaceId: string | null = null
 let filter: LogFilter = {}
 const selected = new Set<string>()
 let anchor = -1
@@ -478,7 +480,9 @@ async function start(): Promise<void> {
   if (MODE === 'editor') {
     try {
       const doc = await orca.document!.get()
-      root = JSON.parse(doc.content.text ?? '{}').root
+      const content = JSON.parse(doc.content.text ?? '{}')
+      root = content.root
+      docWorkspaceId = typeof content.workspaceId === 'string' ? content.workspaceId : null
     } catch {
       root = undefined
     }
@@ -739,6 +743,30 @@ function copyHashes(): void {
 
 // ---------- Details ----------
 
+/** Opens the file's changes in their own editor tab; falls back to the in-frame viewer (no workspace, web client). */
+async function showDiff(root: string, details: CommitDetails, index: number): Promise<void> {
+  try {
+    const workspaceId = repo?.workspaceId ?? docWorkspaceId
+    const result = await api.openDiffTab({ root, hash: details.hash, files: details.files, index, ...(workspaceId ? { workspaceId } : {}) })
+    if (result.ok) return
+  } catch {
+    // Fall through to the in-frame viewer.
+  }
+  openDiff({
+    root,
+    hash: details.hash,
+    files: details.files,
+    index,
+    mode: prefs.diffMode,
+    wholeFile: prefs.diffWholeFile,
+    onPrefs: (mode, wholeFile) => {
+      prefs.diffMode = mode
+      prefs.diffWholeFile = wholeFile
+      savePrefs()
+    }
+  })
+}
+
 let detailsTimer: ReturnType<typeof setTimeout> | undefined
 let detailsToken = 0
 function updateDetails(): void {
@@ -761,20 +789,7 @@ function updateDetails(): void {
       if (token === detailsToken)
         renderDetails(detailsPane, details, {
           select: (hash) => void jumpTo(hash),
-          openDiff: (index) =>
-            openDiff({
-              root,
-              hash: details.hash,
-              files: details.files,
-              index,
-              mode: prefs.diffMode,
-              wholeFile: prefs.diffWholeFile,
-              onPrefs: (mode, wholeFile) => {
-                prefs.diffMode = mode
-                prefs.diffWholeFile = wholeFile
-                savePrefs()
-              }
-            })
+          openDiff: (index) => void showDiff(root, details, index)
         })
     } catch (error) {
       if (token === detailsToken) renderPlaceholder(detailsPane, errorMessage(error))

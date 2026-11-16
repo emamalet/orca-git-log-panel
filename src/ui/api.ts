@@ -4,6 +4,7 @@ import type {
   ActionResult,
   CheckResult,
   CommitDetails,
+  DiffTabRequest,
   FileChange,
   FileDiff,
   LogFilter,
@@ -48,7 +49,8 @@ export const api = {
     orca.plugin.request('action.check', { root, kind, hashes }, LONG),
   run: (root: string, action: ActionRequest): Promise<ActionResult> => orca.plugin.request('action.run', { root, action }, LONG),
   openTab: (workspaceId?: string | null): Promise<{ ok: boolean; reason?: string }> =>
-    orca.plugin.request('tab.open', workspaceId ? { workspaceId } : {})
+    orca.plugin.request('tab.open', workspaceId ? { workspaceId } : {}),
+  openDiffTab: (request: DiffTabRequest): Promise<{ ok: boolean; reason?: string }> => orca.plugin.request('diff.openTab', request)
 }
 
 export function errorMessage(error: unknown): string {

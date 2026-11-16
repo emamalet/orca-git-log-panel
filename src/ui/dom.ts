@@ -39,6 +39,8 @@ export const ICONS = {
   refresh: stroke('M13 8a5 5 0 1 1-1.5-3.6M13 2.5v3h-3'),
   chevronDown: stroke('M4 6l4 4 4-4'),
   chevronRight: stroke('M6 4l4 4-4 4'),
+  expandAll: stroke('M5 6l3-3 3 3M5 10l3 3 3-3'),
+  collapseAll: stroke('M5 3l3 3 3-3M5 13l3-3 3 3'),
   close: stroke('M4 4l8 8M12 4l-8 8'),
   tree: stroke('M2.5 3h11M2.5 3v10M2.5 8h4M2.5 13h4M9 8h4.5M9 13h4.5'),
   details: `<rect x="2" y="2.5" width="12" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/>${stroke('M9.5 2.5v11')}`,
