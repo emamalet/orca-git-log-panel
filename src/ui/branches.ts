@@ -79,7 +79,6 @@ export function renderBranches(container: HTMLElement, host: BranchesHost, query
         },
         current ? icon('star', 'ic-head') : icon(kind === 'tag' ? 'tag' : 'branch', `ic-${kind}`),
         h('span', { class: 'label' }, label),
-        ref.upstream && kind === 'local' ? h('span', { class: 'track' }, `→ ${ref.upstream.replace(/^refs\/remotes\//, '')}`) : null,
         h('span', { class: 'spacer' }),
         ref.hash
           ? h(

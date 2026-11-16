@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 — 2026-11-16
+
+The branches tree no longer shows the upstream next to each local branch (`→ origin/main`), so long
+branch names fit; the upstream is still shown in the tooltip.
+
 ## 0.3.0 — 2026-11-16
 
 The toolbar now shows the current branch with how far it is behind and ahead of its upstream, and any

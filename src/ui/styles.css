@@ -417,11 +417,6 @@ textarea {
   padding-left: 6px;
 }
 
-.node-row .track {
-  color: var(--muted-fg);
-  font-size: 11px;
-}
-
 .node-row.group > .label {
   font-weight: 600;
 }
