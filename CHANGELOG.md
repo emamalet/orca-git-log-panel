@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.9 — 2026-11-16
+
+Fixed the panel freezing (Orca reporting that Git Log stopped responding) when clicking or double-clicking
+a branch in the branches tree. Jumping to a branch tip that was not loaded yet could spin forever while
+another page or a branch filter was loading; it now waits for that load and gives up cleanly when the log
+is reloaded, so double-clicking a branch reliably shows its log.
+
 ## 0.1.8 — 2026-11-16
 
 The changed files of a commit now show as a folder tree: folders fold and unfold, chains of single-child

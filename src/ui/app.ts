@@ -636,9 +636,18 @@ function selectRange(to: number, additive: boolean): void {
 }
 
 async function jumpTo(hash: string): Promise<void> {
+  const token = loadToken
   let index = indexByHash.get(hash)
-  while (index === undefined && hasMore && rows.length < 10_000) {
-    await loadMore()
+  while (index === undefined && (hasMore || loading) && rows.length < 10_000) {
+    // A load already in flight makes loadMore() return at once: wait for it instead of spinning.
+    if (loading) await new Promise((resolve) => setTimeout(resolve, 50))
+    else {
+      const before = rows.length
+      await loadMore()
+      if (rows.length === before && !loading) break
+    }
+    // The log was reloaded (a filter, a refresh, a double-click on a branch): this jump is stale.
+    if (token !== loadToken) return
     index = indexByHash.get(hash)
   }
   if (index === undefined) {
