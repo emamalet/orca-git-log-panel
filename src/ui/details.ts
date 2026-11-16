@@ -1,4 +1,4 @@
-import type { CommitDetails, CommitRow } from '../shared/protocol.ts'
+import type { CommitDetails, CommitRow, FileChange } from '../shared/protocol.ts'
 import { h, icon } from './dom.ts'
 import { buildFileTree, type DirNode } from './filetree.ts'
 import { fullDate, shortHash, STATUS_NAMES } from './format.ts'
@@ -17,23 +17,10 @@ export function renderPlaceholder(container: HTMLElement, text: string): void {
   container.replaceChildren(h('div', { class: 'section muted' }, text))
 }
 
-export function renderMany(container: HTMLElement, commits: CommitRow[]): void {
-  container.replaceChildren(
-    h(
-      'div',
-      { class: 'section' },
-      h('div', { class: 'subject' }, `${commits.length} commits selected`),
-      ...commits.slice(0, 50).map((c) => h('div', { class: 'file' }, h('span', { class: 'mono muted' }, shortHash(c.hash)), h('span', { class: 'name' }, c.subject))),
-      commits.length > 50 ? h('div', { class: 'muted' }, `… and ${commits.length - 50} more`) : null
-    )
-  )
-}
-
-export function renderDetails(container: HTMLElement, d: CommitDetails, host: DetailsHost): void {
-  const [subject, ...rest] = d.message.split('\n')
-  const body = rest.join('\n').replace(/^\s*\n/, '')
+/** The changed files as a foldable folder tree; double-click (or Enter) opens `files[index]`'s diff. */
+function filesSection(files: FileChange[], note: string | null, openDiff: (index: number) => void): HTMLElement {
   const fileRow = (index: number, depth: number) => {
-    const f = d.files[index]
+    const f = files[index]
     const letter = f.status[0] ?? 'M'
     return h(
       'div',
@@ -42,11 +29,11 @@ export function renderDetails(container: HTMLElement, d: CommitDetails, host: De
         style: `padding-left:${depth * INDENT + 18}px`,
         tabindex: '0',
         title: `${STATUS_NAMES[letter] ?? f.status}: ${f.oldPath ? `${f.oldPath} → ` : ''}${f.path}\nDouble-click to show the changes`,
-        ondblclick: () => host.openDiff(index),
+        ondblclick: () => openDiff(index),
         onkeydown: (event: KeyboardEvent) => {
           if (event.key !== 'Enter') return
           event.preventDefault()
-          host.openDiff(index)
+          openDiff(index)
         }
       },
       icon('file'),
@@ -89,7 +76,7 @@ export function renderDetails(container: HTMLElement, d: CommitDetails, host: De
     }),
     ...dir.files.map((index) => fileRow(index, depth))
   ]
-  const files = renderDir(buildFileTree(d.files.map((f) => f.path)), 0)
+  const rows = renderDir(buildFileTree(files.map((f) => f.path)), 0)
   const foldAll = (folded: boolean) => folders.forEach((folder) => setFolded(folder, folded))
   const treeTools = folders.length
     ? h(
@@ -99,22 +86,51 @@ export function renderDetails(container: HTMLElement, d: CommitDetails, host: De
         h('button', { class: 'tool', title: 'Collapse all', 'aria-label': 'Collapse all', onclick: () => foldAll(true) }, icon('collapseAll'))
       )
     : null
+  return h(
+    'div',
+    { class: 'section' },
+    h('div', { class: 'files-title' }, `${files.length} file${files.length === 1 ? '' : 's'} changed`, note ? h('span', { class: 'muted' }, note) : null, treeTools),
+    ...(rows.length ? rows : [h('div', { class: 'muted' }, 'No changes')])
+  )
+}
+
+/** Several commits: the files they changed together, then the commits. `files` is null while loading. */
+export function renderMany(
+  container: HTMLElement,
+  commits: CommitRow[],
+  files: FileChange[] | string | null,
+  host: Pick<DetailsHost, 'select'> & { openDiff(files: FileChange[], index: number): void }
+): void {
+  container.replaceChildren(
+    Array.isArray(files)
+      ? filesSection(files, '(in the selected commits)', (index) => host.openDiff(files, index))
+      : h('div', { class: 'section muted' }, files ?? 'Loading the changed files…'),
+    h(
+      'div',
+      { class: 'section' },
+      h('div', { class: 'subject' }, `${commits.length} commits selected`),
+      ...commits.slice(0, 50).map((c) =>
+        h(
+          'div',
+          { class: 'file openable', title: `${c.hash}\nClick to select only this commit`, onclick: () => host.select(c.hash) },
+          h('span', { class: 'mono muted' }, shortHash(c.hash)),
+          h('span', { class: 'name' }, c.subject)
+        )
+      ),
+      commits.length > 50 ? h('div', { class: 'muted' }, `… and ${commits.length - 50} more`) : null
+    )
+  )
+}
+
+export function renderDetails(container: HTMLElement, d: CommitDetails, host: DetailsHost): void {
+  const [subject, ...rest] = d.message.split('\n')
+  const body = rest.join('\n').replace(/^\s*\n/, '')
   const parents = d.parents.map((p, i) =>
     h('span', null, i ? ', ' : '', h('a', { class: 'hash-link mono', title: p, onclick: () => host.select(p) }, shortHash(p)))
   )
   container.replaceChildren(
-    h(
-      'div',
-      { class: 'section' },
-      h(
-        'div',
-        { class: 'files-title' },
-        `${d.files.length} file${d.files.length === 1 ? '' : 's'} changed`,
-        d.parents.length > 1 ? h('span', { class: 'muted' }, '(vs. first parent)') : null,
-        treeTools
-      ),
-      ...(files.length ? files : [h('div', { class: 'muted' }, 'No changes')])
-    ),
+    filesSection(d.files, d.parents.length > 1 ? '(vs. first parent)' : null, (index) => host.openDiff(index)),
+
     h(
       'div',
       { class: 'section' },

@@ -45,15 +45,29 @@ export function parseUnifiedDiff(stdout: string, maxLines = MAX_DIFF_LINES): Pic
 
 const literal = (path: string) => `:(literal)${path}`
 
-/** The changes `hash` made to `path` (renamed from `oldPath`), against its first parent. */
-export async function readFileDiff(git: Git, hash: string, path: string, oldPath?: string, wholeFile = false): Promise<FileDiff> {
-  if (!/^[0-9a-f]{40}$/.test(hash)) throw new Error(`Invalid commit: ${hash}`)
+const HASH = /^[0-9a-f]{40}$/
+
+/**
+ * The changes `hash` made to `path` (renamed from `oldPath`), against its first parent;
+ * or, given `range`, the changes from `range.base` to `range.tip` (a multi-commit selection).
+ */
+export async function readFileDiff(
+  git: Git,
+  hash: string,
+  path: string,
+  oldPath?: string,
+  wholeFile = false,
+  range?: { base: string; tip: string }
+): Promise<FileDiff> {
+  if (!HASH.test(hash)) throw new Error(`Invalid commit: ${hash}`)
   if (!path || typeof path !== 'string') throw new Error('Missing file path.')
-  const parents = (await git.out(['rev-list', '--parents', '-n1', hash, '--'])).trim().split(' ').slice(1)
+  if (range && !(HASH.test(range.base) && HASH.test(range.tip))) throw new Error('Invalid commit range.')
+  const parents = range ? [range.base] : (await git.out(['rev-list', '--parents', '-n1', hash, '--'])).trim().split(' ').slice(1)
+  const to = range ? range.tip : hash
   const paths = [...(oldPath && oldPath !== path ? [literal(oldPath)] : []), literal(path)]
   const options = ['--no-ext-diff', '--no-textconv', '-M', `-U${wholeFile ? 1_000_000 : 3}`]
   const args = parents.length
-    ? ['diff', ...options, parents[0], hash, '--', ...paths]
+    ? ['diff', ...options, parents[0], to, '--', ...paths]
     : ['diff-tree', '-p', '--root', '--no-commit-id', ...options, hash, '--', ...paths]
   return { path, ...(oldPath ? { oldPath } : {}), ...parseUnifiedDiff(await git.out(args)) }
 }

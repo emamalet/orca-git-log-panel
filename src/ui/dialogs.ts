@@ -1,5 +1,5 @@
-import type { PlanItem, RangeCommit, RebaseAction, ResetMode } from '../shared/protocol.ts'
-import { h, icon } from './dom.ts'
+import type { PlanItem, PushPlan, RangeCommit, RebaseAction, ResetMode } from '../shared/protocol.ts'
+import { append, h, icon } from './dom.ts'
 import { closePopups } from './menu.ts'
 import { shortHash } from './format.ts'
 
@@ -271,6 +271,107 @@ export async function askRebasePlan(commits: RangeCommit[], pushed: string[]): P
     action: item.action,
     ...(item.action === 'reword' ? { message: item.newMessage.replace(/\s+$/, '') } : {})
   }))
+}
+
+type ReadyPlan = Extract<PushPlan, { ok: true }>
+
+const commitLine = (c: { hash: string; subject: string }) =>
+  h('div', { class: 'file' }, h('span', { class: 'mono muted' }, shortHash(c.hash)), h('span', { class: 'name' }, c.subject))
+
+/**
+ * The Push dialog: the commits to send, where to (remote and branch name, editable when publishing),
+ * and a force-with-lease opt-in when the remote branch has commits the local one lacks.
+ */
+export async function askPush(
+  first: ReadyPlan,
+  recheck: (remote: string, remoteBranch: string) => Promise<PushPlan>
+): Promise<{ plan: ReadyPlan; force: boolean } | null> {
+  let plan = first
+  let pending = false
+  let problem: string | null = null
+  const remote = h('select', { class: 'field', 'aria-label': 'Remote' }, ...plan.remotes.map((r) => h('option', { value: r, selected: r === plan.remote }, r))) as HTMLSelectElement
+  const name = h('input', { class: 'field mono', spellcheck: false, 'aria-label': 'Remote branch' }) as HTMLInputElement
+  name.value = plan.remoteBranch
+  const force = h('input', { type: 'checkbox' }) as HTMLInputElement
+  const info = h('div', { class: 'push-info' })
+  const list = h('div', { class: 'push-list' })
+  const render = () => {
+    const n = plan.commits.length
+    info.replaceChildren()
+    append(info, [
+      plan.publish ? h('div', { class: 'muted' }, `${plan.branch} will be published as ${plan.remote}/${plan.remoteBranch} and track it.`) : null,
+      plan.lost.length
+        ? h(
+            'div',
+            { class: 'warning' },
+            icon('warning'),
+            h(
+              'div',
+              null,
+              `${plan.remote}/${plan.remoteBranch} has ${plan.lost.length}${plan.lost.length >= 50 ? '+' : ''} commit${plan.lost.length === 1 ? '' : 's'} that ${plan.branch} lacks. Fetch and merge or rebase first, or force push to discard them:`,
+              ...plan.lost.slice(0, 5).map(commitLine),
+              h('label', { class: 'checkbox' }, force, 'Force push (with lease) and discard them')
+            )
+          )
+        : null
+    ])
+    list.replaceChildren(
+      h('div', { class: 'files-title' }, n ? `${n}${plan.more ? '+' : ''} commit${n === 1 ? '' : 's'} to push` : 'Nothing to push: the remote already has every commit.'),
+      ...plan.commits.map(commitLine)
+    )
+  }
+  const refresh = async () => {
+    pending = true
+    try {
+      const next = await recheck(remote.value, name.value.trim())
+      if (next.ok) {
+        plan = next
+        problem = null
+      } else problem = next.reason
+    } catch (error) {
+      problem = error instanceof Error ? error.message : String(error)
+    }
+    pending = false
+    force.checked = false
+    render()
+  }
+  remote.addEventListener('change', () => void refresh())
+  name.addEventListener('change', () => void refresh())
+  render()
+  const result = await dialog<string>({
+    title: `Push ${plan.branch}`,
+    wide: true,
+    body: [h('div', { class: 'push-target' }, h('span', { class: 'mono' }, plan.branch), '→', remote, '/', name), info, list],
+    buttons: [cancel(), { label: 'Push', value: 'ok', kind: 'primary' }],
+    validate: () => {
+      if (pending) return 'Checking the remote…'
+      if (problem) return problem
+      if (name.value.trim() !== plan.remoteBranch || remote.value !== plan.remote) {
+        void refresh()
+        return 'Checking the remote…'
+      }
+      if (plan.lost.length && !force.checked) return 'The remote branch has commits yours lacks: check "Force push" to discard them.'
+      if (!plan.commits.length && plan.remoteHash && !plan.lost.length && !plan.publish) return 'Nothing to push.'
+      return null
+    }
+  })
+  return result ? { plan, force: plan.lost.length > 0 && force.checked } : null
+}
+
+/** Checking out with uncommitted changes: let git carry them over, stash them first, or cancel. */
+export async function askDirtyCheckout(target: string, files: string[]): Promise<'keep' | 'stash' | null> {
+  return dialog<'keep' | 'stash'>({
+    title: 'Uncommitted Changes',
+    body: [
+      `${files.length} file${files.length === 1 ? ' has' : 's have'} uncommitted changes. Checking out ${target}:`,
+      h('ul', { class: 'help-list' },
+        h('li', null, h('strong', null, 'Stash and Checkout'), ' — put the changes aside (git stash); restore them later with git stash pop.'),
+        h('li', null, h('strong', null, 'Keep Changes'), ' — carry them over; git refuses if they conflict with the other branch.')
+      ),
+      h('div', { class: 'push-list' }, ...files.slice(0, 20).map((f) => h('div', { class: 'file mono' }, f)), files.length > 20 ? h('div', { class: 'muted' }, `… and ${files.length - 20} more`) : null)
+    ],
+    buttons: [cancel(), { label: 'Keep Changes', value: 'keep' }, { label: 'Stash and Checkout', value: 'stash', kind: 'primary' }]
+  })
 }
 
 /** A non-dismissable spinner while the worker runs a long action. */

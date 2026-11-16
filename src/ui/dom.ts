@@ -65,7 +65,13 @@ export const ICONS = {
   rebase: stroke('M2.5 4h7M2.5 8h7M2.5 12h7M12.5 3v10M10.5 11l2 2 2-2'),
   filter: stroke('M2.5 3h11L9.5 8v5l-3-1.5V8z'),
   locate: `<circle cx="8" cy="8" r="2" fill="currentColor"/>${stroke('M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3')}<circle cx="8" cy="8" r="4.5" fill="none" stroke="currentColor" stroke-width="1.2"/>`,
-  patch: stroke('M4 2h5l3 3v9H4zM9 2v3h3M6.5 8h3M8 6.5v3M6.5 11.5h3')
+  patch: stroke('M4 2h5l3 3v9H4zM9 2v3h3M6.5 8h3M8 6.5v3M6.5 11.5h3'),
+  fetch: stroke('M8 2v8M4.5 6.5 8 10l3.5-3.5M3 13.5h10'),
+  push: stroke('M8 11V3M4.5 6.5 8 3l3.5 3.5M3 13.5h10'),
+  pull: stroke('M8 3v10M4.5 9.5 8 13l3.5-3.5'),
+  merge: `<circle cx="4.5" cy="3.5" r="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="4.5" cy="12.5" r="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="11.5" cy="8" r="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/>${stroke('M4.5 5v6M4.5 5c0 3 2.5 3 5.5 3')}`,
+  trash: stroke('M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4'),
+  stash: stroke('M2.5 6.5h11v7h-11zM4 4h8M5.5 2h5M6 9.5h4')
 } as const
 
 export function clear(el: Element): void {

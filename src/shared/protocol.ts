@@ -28,8 +28,20 @@ export interface BranchRef {
   upstream?: string
 }
 
+/** Where the current branch stands against its upstream. */
+export interface BranchStatus {
+  /** Short upstream name (origin/main), or null when the branch tracks nothing. */
+  upstream: string | null
+  /** Commits to push. */
+  ahead: number
+  /** Commits to pull. */
+  behind: number
+}
+
 export interface RefsResult {
   head: { branch: string | null; hash: string | null }
+  status: BranchStatus
+  operation: RepoInfo['operation']
   locals: BranchRef[]
   remotes: BranchRef[]
   tags: BranchRef[]
@@ -72,6 +84,9 @@ export interface FileChange {
   status: string
   path: string
   oldPath?: string
+  /** For a multi-commit selection: the file is diffed from ase (a commit, or the empty tree) to 	ip. */
+  base?: string
+  tip?: string
 }
 
 export interface CommitDetails {
@@ -129,7 +144,7 @@ export interface PlanItem {
 export type RewriteKind = 'squash' | 'fixup' | 'drop' | 'reword' | 'rebase' | 'undo'
 
 export type ActionRequest =
-  | { kind: 'checkout'; target: string }
+  | { kind: 'checkout'; target: string; stash?: boolean }
   | { kind: 'branch'; hash: string; name: string; checkout: boolean }
   | { kind: 'tag'; hash: string; name: string }
   | { kind: 'cherryPick'; hashes: string[] }
@@ -141,6 +156,12 @@ export type ActionRequest =
   | { kind: 'drop'; hashes: string[] }
   | { kind: 'reword'; hash: string; message: string }
   | { kind: 'rebase'; plan: PlanItem[] }
+  | { kind: 'fetch' }
+  | { kind: 'push'; branch: string; hash: string; remote: string; remoteBranch: string; setUpstream: boolean; force?: boolean; expect?: string }
+  | { kind: 'renameBranch'; name: string; newName: string }
+  | { kind: 'deleteBranch'; name: string; force?: boolean }
+  | { kind: 'merge'; ref: string }
+  | { kind: 'rebaseOnto'; ref: string }
 
 export interface RangeCommit {
   hash: string
@@ -157,7 +178,30 @@ export interface ActionResult {
   message: string
   /** HEAD before the action, so the UI can offer Undo. */
   previousHead?: string
+  /** The branch is not fully merged: deleting it needs force. */
+  needsForce?: boolean
 }
+
+/** What a push of the current branch would do. */
+export type PushPlan =
+  | {
+      ok: true
+      branch: string
+      hash: string
+      remotes: string[]
+      remote: string
+      remoteBranch: string
+      /** The branch tracks nothing yet: the push publishes it and makes the target its upstream. */
+      publish: boolean
+      /** Commits the remote lacks, newest first (at most 200). */
+      commits: { hash: string; subject: string }[]
+      more: boolean
+      /** Remote commits a push would discard (the branches diverged), newest first. */
+      lost: { hash: string; subject: string }[]
+      /** The remote branch's commit, for --force-with-lease. */
+      remoteHash: string | null
+    }
+  | { ok: false; reason: string }
 
 export type PatchResult =
   | { ok: true; name: string; size: number; text?: string; tooLarge?: boolean; path?: string }
@@ -179,9 +223,12 @@ declare module 'orca' {
     'repo.watch': { input: { root: string }; output: { ok: boolean } }
     'log.page': { input: { root: string; filter: LogFilter; skip: number; limit?: number }; output: LogPage }
     'commit.details': { input: { root: string; hash: string }; output: CommitDetails }
-    'file.diff': { input: { root: string; hash: string; path: string; oldPath?: string; wholeFile?: boolean }; output: FileDiff }
+    'file.diff': { input: { root: string; hash: string; path: string; oldPath?: string; base?: string; tip?: string; wholeFile?: boolean }; output: FileDiff }
     'patch.create': { input: { root: string; hashes: string[]; path?: string; overwrite?: boolean }; output: PatchResult }
     'action.check': { input: { root: string; kind: RewriteKind; hashes: string[] }; output: CheckResult }
+    'push.check': { input: { root: string; remote?: string; remoteBranch?: string }; output: PushPlan }
+    'repo.dirty': { input: { root: string }; output: { files: string[] } }
+    'selection.files': { input: { root: string; hashes: string[] }; output: { files: FileChange[] } }
     'action.run': { input: { root: string; action: ActionRequest }; output: ActionResult }
     'tab.open': { input: { workspaceId?: string }; output: { ok: boolean; reason?: string } }
     'diff.openTab': { input: DiffTabRequest; output: { ok: boolean; reason?: string } }

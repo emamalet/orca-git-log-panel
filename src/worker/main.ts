@@ -2,9 +2,10 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { dirname, join, resolve } from 'node:path'
 import type { OrcaWorkerApi } from 'orca/worker'
 import type { RepoResult } from '../shared/protocol.ts'
-import { checkRewrite, runAction } from './actions.ts'
+import { checkRewrite, dirtyFiles, runAction } from './actions.ts'
 import { createGit, type Git } from './git.ts'
-import { readDetails, readLogPage, readRefs } from './log.ts'
+import { readDetails, readLogPage, readRefs, readSelectionFiles } from './log.ts'
+import { checkPush } from './push.ts'
 import { focusedWorkspace, resolveRepo, toplevel, type ListedWorkspace, type Workspace } from './repo.ts'
 import { readFileDiff } from './diff.ts'
 import { DIFF_DIR, pickWorkspace, validDiffRequest, writeDiffAnchor } from './difftab.ts'
@@ -92,8 +93,16 @@ export default function activate(orca: OrcaWorkerApi): void {
 
   orca.panels.handle('commit.details', async ({ root, hash }) => readDetails(await gitFor(root), hash))
 
-  orca.panels.handle('file.diff', async ({ root, hash, path, oldPath, wholeFile }) =>
-    readFileDiff(await gitFor(root), hash, path, oldPath, Boolean(wholeFile))
+  orca.panels.handle('file.diff', async ({ root, hash, path, oldPath, base, tip, wholeFile }) =>
+    readFileDiff(await gitFor(root), hash, path, oldPath, Boolean(wholeFile), base || tip ? { base: String(base), tip: String(tip) } : undefined)
+  )
+
+  orca.panels.handle('selection.files', async ({ root, hashes }) => ({ files: await readSelectionFiles(await gitFor(root), hashes) }))
+
+  orca.panels.handle('repo.dirty', async ({ root }) => ({ files: await dirtyFiles(await gitFor(root)) }))
+
+  orca.panels.handle('push.check', async ({ root, remote, remoteBranch }) =>
+    checkPush(await gitFor(root), typeof remote === 'string' ? remote : undefined, typeof remoteBranch === 'string' ? remoteBranch : undefined)
   )
 
   orca.panels.handle('patch.create', async ({ root, hashes, path, overwrite }) =>

@@ -10,6 +10,7 @@ import type {
   LogFilter,
   LogPage,
   PatchResult,
+  PushPlan,
   RefsResult,
   RepoResult,
   RewriteKind
@@ -42,7 +43,16 @@ export const api = {
     orca.plugin.request('log.page', { root, filter, skip, ...(limit ? { limit } : {}) }, LONG),
   details: (root: string, hash: string): Promise<CommitDetails> => orca.plugin.request('commit.details', { root, hash }),
   diff: (root: string, hash: string, file: FileChange, wholeFile: boolean): Promise<FileDiff> =>
-    orca.plugin.request('file.diff', { root, hash, path: file.path, ...(file.oldPath ? { oldPath: file.oldPath } : {}), wholeFile }, LONG),
+    orca.plugin.request(
+      'file.diff',
+      { root, hash, path: file.path, ...(file.oldPath ? { oldPath: file.oldPath } : {}), ...(file.base ? { base: file.base, tip: file.tip } : {}), wholeFile },
+      LONG
+    ),
+  selectionFiles: (root: string, hashes: string[]): Promise<{ files: FileChange[] }> =>
+    orca.plugin.request('selection.files', { root, hashes }, LONG),
+  dirty: (root: string): Promise<{ files: string[] }> => orca.plugin.request('repo.dirty', { root }),
+  pushCheck: (root: string, remote?: string, remoteBranch?: string): Promise<PushPlan> =>
+    orca.plugin.request('push.check', { root, ...(remote ? { remote } : {}), ...(remoteBranch ? { remoteBranch } : {}) }, LONG),
   patch: (root: string, hashes: string[], path?: string, overwrite = false): Promise<PatchResult> =>
     orca.plugin.request('patch.create', { root, hashes, ...(path ? { path, overwrite } : {}) }, LONG),
   check: (root: string, kind: RewriteKind, hashes: string[]): Promise<CheckResult> =>

@@ -1,10 +1,10 @@
-import type { ActionRequest, ActionResult, BranchRef, CommitDetails, CommitRow, LogFilter, RefsResult, RepoInfo, RepoResult, RewriteKind, WorkspaceChoice } from '../shared/protocol.ts'
+import type { ActionRequest, ActionResult, BranchRef, CommitRow, FileChange, LogFilter, RefsResult, RepoInfo, RepoResult, RewriteKind, WorkspaceChoice } from '../shared/protocol.ts'
 import { api, copyText, errorMessage, orca } from './api.ts'
 import { renderBranches } from './branches.ts'
 import { renderDetails, renderMany, renderPlaceholder } from './details.ts'
 import { openDiff, type DiffMode } from './diff.ts'
-import { askName, askPatch, askRebasePlan, askReset, busy, confirm, editMessage, pushedWarning } from './dialogs.ts'
-import { h, icon } from './dom.ts'
+import { askDirtyCheckout, askName, askPatch, askPush, askRebasePlan, askReset, busy, confirm, editMessage, pushedWarning } from './dialogs.ts'
+import { append, h, icon } from './dom.ts'
 import { createFilterBar } from './filters.ts'
 import { reachableFrom, refLabels, relativeDate, fullDate, shortHash } from './format.ts'
 import { computeGraph, graphSvg, ROW_HEIGHT, type GraphRow } from './graph.ts'
@@ -66,6 +66,8 @@ let choices: WorkspaceChoice[] = []
 /** Workspace named by the editor tab's document, whose repo has no focused workspace id. */
 let docWorkspaceId: string | null = null
 let filter: LogFilter = {}
+/** Select HEAD's commit once the log of a newly opened repository loads. */
+let selectHead = false
 const selected = new Set<string>()
 let anchor = -1
 let cursor = -1
@@ -84,6 +86,9 @@ const caseToggle = h('button', { class: `toggle${prefs.matchCase ? ' on' : ''}`,
 const treeToggle = h('button', { class: 'tool', title: 'Show branches' }, icon('tree'))
 const detailsToggle = h('button', { class: 'tool', title: 'Show details' }, icon('details'))
 const refreshButton = h('button', { class: 'tool', title: 'Refresh' }, icon('refresh'))
+const fetchButton = h('button', { class: 'tool', title: 'Fetch all remotes' }, icon('fetch'))
+const pushButton = h('button', { class: 'tool', title: 'Push…' }, icon('push'))
+const statusChip = h('button', { class: 'status-chip', hidden: true })
 const tabButton = h('button', { class: 'tool', title: 'Open Git Log in an editor tab' }, icon('external'))
 
 const filterBar = createFilterBar({
@@ -103,6 +108,9 @@ const toolbar = h(
   h('label', { class: 'search' }, icon('search'), searchInput, regexToggle, caseToggle),
   ...filterBar.elements,
   h('div', { class: 'spacer' }),
+  statusChip,
+  fetchButton,
+  pushButton,
   refreshButton,
   detailsToggle,
   MODE === 'panel' ? tabButton : null
@@ -393,6 +401,14 @@ async function reloadLog(keepCount = false): Promise<void> {
   loading = false
   recompute()
   for (const hash of [...selected]) if (!indexByHash.has(hash)) selected.delete(hash)
+  if (selectHead) {
+    selectHead = false
+    const head = indexByHash.get(repo.head.hash ?? '')
+    if (head !== undefined && !selected.size) {
+      selected.add(rows[head].hash)
+      anchor = head
+    }
+  }
   cursor = selected.size ? Math.min(...[...selected].map((h) => indexByHash.get(h)!)) : -1
   if (anchor >= rows.length) anchor = cursor
   renderRows()
@@ -430,7 +446,41 @@ async function loadRefs(): Promise<void> {
     showBanner(`Could not read branches: ${errorMessage(error)}`, 'error')
   }
   renderTree()
+  renderStatus()
   filterBar.update()
+}
+
+const count = (n: number) => (n > 99 ? '99+' : String(n))
+
+/** The toolbar chip: current branch, commits to pull ↙ / push ↗, and any operation in progress. */
+function renderStatus(): void {
+  const head = refs?.head ?? repo?.head
+  statusChip.hidden = !repo || !head?.hash
+  if (!repo || !head?.hash) return
+  const status = refs?.status
+  const operation = refs?.operation ?? repo.operation
+  statusChip.replaceChildren()
+  append(statusChip, [
+    icon('branch'),
+    h('span', { class: 'status-name' }, head.branch ?? `detached at ${shortHash(head.hash)}`),
+    status?.behind ? h('span', { class: 'behind' }, `↙${count(status.behind)}`) : null,
+    status?.ahead ? h('span', { class: 'ahead' }, `↗${count(status.ahead)}`) : null,
+    operation ? h('span', { class: 'operation' }, operation.toUpperCase()) : null
+  ])
+  statusChip.title = [
+    repo.root,
+    head.branch
+      ? status?.upstream
+        ? `${head.branch} tracks ${status.upstream}: ${status.ahead} to push, ${status.behind} to pull${status.behind ? ' (Fetch first to be sure)' : ''}`
+        : `${head.branch} tracks no remote branch: Push publishes it`
+      : 'HEAD is detached',
+    operation ? `A ${operation} is in progress` : '',
+    'Click to select the current commit'
+  ]
+    .filter(Boolean)
+    .join('\n')
+  pushButton.disabled = !head.branch
+  pushButton.title = head.branch ? `Push ${head.branch}…` : 'Check out a branch to push it'
 }
 
 let refreshing: Promise<void> | null = null
@@ -466,6 +516,7 @@ function setRepo(next: RepoInfo): void {
   if (!same) {
     selected.clear()
     anchor = cursor = -1
+    selectHead = true
     filter = { ...filter, branches: [] }
     viewport.scrollTop = 0
     document.title = `Git Log: ${next.name}`
@@ -503,6 +554,7 @@ async function start(): Promise<void> {
       loadError = result.reason
       recompute()
       renderTree()
+      renderStatus()
       renderRows()
       renderPlaceholder(detailsPane, '')
     }
@@ -605,24 +657,133 @@ treeSearch.addEventListener('input', renderTree)
 function branchMenu(event: MouseEvent, ref: BranchRef & { kind: 'local' | 'remote' | 'tag' | 'head' }): void {
   const current = ref.kind === 'local' && ref.name === repo?.head.branch
   const localName = ref.kind === 'remote' ? ref.name.slice(ref.name.indexOf('/') + 1) : ref.name
+  const branch = ref.kind === 'local' || ref.kind === 'remote'
+  const onBranch = repo?.head.branch ?? null
+  const operation = refs?.operation ?? repo?.operation ?? null
+  const intoHint = operation ? `A ${operation} is in progress` : !onBranch ? 'HEAD is detached' : `It is the current branch`
+  const intoOff = Boolean(operation) || !onBranch || current
   const entries: MenuEntry[] = [
     ref.kind === 'local'
-      ? { label: 'Checkout', icon: 'checkout', disabled: current, hint: 'Already checked out', run: () => void act({ kind: 'checkout', target: ref.name }, `Checking out ${ref.name}…`) }
+      ? { label: 'Checkout', icon: 'checkout', disabled: current, hint: 'Already checked out', run: () => void checkout(ref.name) }
       : ref.kind === 'remote'
         ? {
             label: `Checkout as '${localName}'`,
             icon: 'checkout',
             disabled: Boolean(refs?.locals.some((l) => l.name === localName)),
             hint: `A local branch ${localName} already exists`,
-            run: () => void act({ kind: 'checkout', target: localName }, `Checking out ${localName}…`)
+            run: () => void checkout(localName)
           }
-        : { label: 'Checkout Revision', icon: 'checkout', disabled: ref.kind === 'head', run: () => void act({ kind: 'checkout', target: ref.hash }, 'Checking out…') },
-    { label: `New Branch from '${ref.name}'…`, icon: 'branch', run: () => void newBranch(ref.hash) },
+        : { label: 'Checkout Revision', icon: 'checkout', disabled: ref.kind === 'head', run: () => void checkout(ref.hash) },
+    { label: `New Branch from '${ref.name}'…`, icon: 'branch', run: () => void newBranch(ref.hash) }
+  ]
+  if (branch) {
+    entries.push(
+      'separator',
+      {
+        label: `Merge '${ref.name}' into '${onBranch ?? 'HEAD'}'`,
+        icon: 'merge',
+        disabled: intoOff,
+        hint: intoHint,
+        run: () => void mergeInto(ref.full, ref.name)
+      },
+      {
+        label: `Rebase '${onBranch ?? 'HEAD'}' onto '${ref.name}'`,
+        icon: 'rebase',
+        disabled: intoOff,
+        hint: intoHint,
+        run: () => void rebaseOnto(ref.full, ref.name)
+      }
+    )
+  }
+  if (ref.kind === 'local') {
+    entries.push(
+      'separator',
+      { label: 'Rename…', icon: 'edit', run: () => void renameBranch(ref.name) },
+      { label: 'Delete', icon: 'trash', disabled: current, hint: 'The current branch cannot be deleted', run: () => void deleteBranch(ref.name) }
+    )
+  }
+  entries.push(
     'separator',
     { icon: 'search', label: filter.branches?.includes(ref.full) ? 'Show All Branches' : `Show Only '${ref.name}'`, run: () => applyFilter({ branches: filter.branches?.includes(ref.full) ? [] : [ref.full] }) },
     { label: 'Copy Name', icon: 'copy', run: () => copyText(ref.name) }
-  ]
+  )
   showMenu(event.clientX, event.clientY, entries)
+}
+
+/** Checks out `target`, asking first what to do with uncommitted changes. */
+async function checkout(target: string): Promise<void> {
+  if (!repo) return
+  const label = /^[0-9a-f]{40}$/.test(target) ? shortHash(target) : target
+  let stash = false
+  try {
+    const { files } = await api.dirty(repo.root)
+    if (files.length) {
+      const choice = await askDirtyCheckout(label, files)
+      if (!choice) return
+      stash = choice === 'stash'
+    }
+  } catch {
+    // Let git decide: it refuses a checkout that would lose changes.
+  }
+  await act({ kind: 'checkout', target, ...(stash ? { stash } : {}) }, `Checking out ${label}…`)
+}
+
+async function mergeInto(full: string, name: string): Promise<void> {
+  if (await confirm('Merge', `Merge ${name} into ${repo?.head.branch}? A conflict aborts the merge and leaves the branch as it is.`, 'Merge')) {
+    await act({ kind: 'merge', ref: full }, `Merging ${name}…`)
+  }
+}
+
+async function rebaseOnto(full: string, name: string): Promise<void> {
+  const text = `Rebase ${repo?.head.branch} onto ${name}? Its own commits are replayed on top of ${name}; a conflict aborts the rebase. Rewriting pushed commits requires a force push.`
+  if (await confirm('Rebase', text, 'Rebase')) await act({ kind: 'rebaseOnto', ref: full }, `Rebasing onto ${name}…`)
+}
+
+async function renameBranch(name: string): Promise<void> {
+  const answer = await askName(`Rename '${name}'`, 'New branch name', 'Rename')
+  if (answer && answer.name !== name) await act({ kind: 'renameBranch', name, newName: answer.name }, 'Renaming…')
+}
+
+async function deleteBranch(name: string): Promise<void> {
+  if (!(await confirm('Delete Branch', `Delete the local branch ${name}?`, 'Delete', true))) return
+  const result = await act({ kind: 'deleteBranch', name }, `Deleting ${name}…`, true)
+  if (!result?.needsForce) return
+  const text = `${name} is not fully merged: its commits that are in no other branch will be lost (git can still recover them for a while from the reflog). Delete it anyway?`
+  if (await confirm('Branch Not Merged', text, 'Force Delete', true)) await act({ kind: 'deleteBranch', name, force: true }, `Deleting ${name}…`)
+}
+
+async function fetchAll(): Promise<void> {
+  await act({ kind: 'fetch' }, 'Fetching…')
+}
+
+async function pushBranch(): Promise<void> {
+  if (!repo) return
+  const root = repo.root
+  const done = busy('Checking what to push…')
+  let first
+  try {
+    first = await api.pushCheck(root)
+  } catch (error) {
+    first = { ok: false as const, reason: errorMessage(error) }
+  } finally {
+    done()
+  }
+  if (!first.ok) return showBanner(first.reason, 'error')
+  const choice = await askPush(first, (remote, remoteBranch) => api.pushCheck(root, remote, remoteBranch))
+  if (!choice) return
+  const { plan, force } = choice
+  await act(
+    {
+      kind: 'push',
+      branch: plan.branch,
+      hash: plan.hash,
+      remote: plan.remote,
+      remoteBranch: plan.remoteBranch,
+      setUpstream: plan.publish,
+      ...(force ? { force, ...(plan.remoteHash ? { expect: plan.remoteHash } : {}) } : {})
+    },
+    force ? 'Force pushing…' : 'Pushing…'
+  )
 }
 
 // ---------- Selection ----------
@@ -779,18 +940,18 @@ function copyHashes(): void {
 // ---------- Details ----------
 
 /** Opens the file's changes in their own editor tab; falls back to the in-frame viewer (no workspace, web client). */
-async function showDiff(root: string, details: CommitDetails, index: number): Promise<void> {
+async function showDiff(root: string, hash: string, files: FileChange[], index: number): Promise<void> {
   try {
     const workspaceId = repo?.workspaceId ?? docWorkspaceId
-    const result = await api.openDiffTab({ root, hash: details.hash, files: details.files, index, ...(workspaceId ? { workspaceId } : {}) })
+    const result = await api.openDiffTab({ root, hash, files, index, ...(workspaceId ? { workspaceId } : {}) })
     if (result.ok) return
   } catch {
     // Fall through to the in-frame viewer.
   }
   openDiff({
     root,
-    hash: details.hash,
-    files: details.files,
+    hash,
+    files,
     index,
     mode: prefs.diffMode,
     wholeFile: prefs.diffWholeFile,
@@ -812,19 +973,35 @@ function updateDetails(): void {
     renderPlaceholder(detailsPane, repo ? 'Select a commit to see its details.' : '')
     return
   }
-  if (hashes.length > 1) {
-    renderMany(detailsPane, hashes.map((hash) => rows[indexByHash.get(hash)!]).filter(Boolean))
-    return
-  }
   const token = ++detailsToken
   const root = repo.root
+  if (hashes.length > 1) {
+    const commits = hashes.map((hash) => rows[indexByHash.get(hash)!]).filter(Boolean)
+    const host = {
+      select: (hash: string) => void jumpTo(hash),
+      openDiff: (files: FileChange[], index: number) => void showDiff(root, hashes[0], files, index)
+    }
+    const tooMany = hashes.length > 200 ? 'Select at most 200 commits to see the files they changed.' : null
+    renderMany(detailsPane, commits, tooMany, host)
+    if (tooMany) return
+    detailsTimer = setTimeout(async () => {
+      let files: FileChange[] | string
+      try {
+        files = (await api.selectionFiles(root, hashes)).files
+      } catch (error) {
+        files = errorMessage(error)
+      }
+      if (token === detailsToken) renderMany(detailsPane, commits, files, host)
+    }, 150)
+    return
+  }
   detailsTimer = setTimeout(async () => {
     try {
       const details = await api.details(root, hashes[0])
       if (token === detailsToken)
         renderDetails(detailsPane, details, {
           select: (hash) => void jumpTo(hash),
-          openDiff: (index) => void showDiff(root, details, index)
+          openDiff: (index) => void showDiff(root, details.hash, details.files, index)
         })
     } catch (error) {
       if (token === detailsToken) renderPlaceholder(detailsPane, errorMessage(error))
@@ -836,7 +1013,7 @@ function updateDetails(): void {
 
 const UNDOABLE = new Set<ActionRequest['kind']>(['cherryPick', 'revert', 'reset', 'squash', 'fixup', 'drop', 'reword', 'rebase'])
 
-async function act(action: ActionRequest, progress: string): Promise<ActionResult | null> {
+async function act(action: ActionRequest, progress: string, quietNeedsForce = false): Promise<ActionResult | null> {
   if (!repo) return null
   const root = repo.root
   const done = busy(progress)
@@ -854,7 +1031,12 @@ async function act(action: ActionRequest, progress: string): Promise<ActionResul
       ? [{ label: 'Undo', run: () => void act({ kind: 'reset', hash: previous, mode: 'keep' }, 'Undoing…').then((r) => r?.ok && showBanner(`Restored HEAD to ${shortHash(previous)}.`, 'success')) }]
       : []
     showBanner(result.message, 'success', undo)
-  } else showBanner(result.message, 'error')
+    // A renamed or deleted branch can't stay in the branch filter: the log would fail to load.
+    if ((action.kind === 'deleteBranch' || action.kind === 'renameBranch') && filter.branches?.includes(`refs/heads/${action.name}`)) {
+      filter = { ...filter, branches: filter.branches.filter((b) => b !== `refs/heads/${action.name}`) }
+      filterBar.update()
+    }
+  } else if (!(quietNeedsForce && result.needsForce)) showBanner(result.message, 'error')
   await refreshAll()
   return result
 }
@@ -1000,17 +1182,17 @@ function commitMenu(x: number, y: number): void {
       run: () => void createPatch(hashes)
     },
     'separator',
-    { label: 'Checkout Revision', icon: 'checkout', disabled: !single, hint: 'Select one commit', run: () => void act({ kind: 'checkout', target: single!.hash }, 'Checking out…') }
+    { label: 'Checkout Revision', icon: 'checkout', disabled: !single, hint: 'Select one commit', run: () => void checkout(single!.hash) }
   ]
   if (single) {
     for (const label of refLabels(single.refs, repo.head.branch)) {
       if (label.kind === 'local' && !label.current) {
         const name = label.refs[0]
-        entries.push({ label: `Checkout '${name}'`, run: () => void act({ kind: 'checkout', target: name }, `Checking out ${name}…`) })
+        entries.push({ label: `Checkout '${name}'`, run: () => void checkout(name) })
       } else if (label.kind === 'remote') {
         const name = label.text.slice(label.text.indexOf('/') + 1)
         if (!refs?.locals.some((l) => l.name === name)) {
-          entries.push({ label: `Checkout '${label.text}' as '${name}'`, run: () => void act({ kind: 'checkout', target: name }, `Checking out ${name}…`) })
+          entries.push({ label: `Checkout '${label.text}' as '${name}'`, run: () => void checkout(name) })
         }
       }
     }
@@ -1071,6 +1253,12 @@ detailsToggle.addEventListener('click', () => {
   updateDetails()
 })
 refreshButton.addEventListener('click', () => void refreshAll())
+fetchButton.addEventListener('click', () => void fetchAll())
+pushButton.addEventListener('click', () => void pushBranch())
+statusChip.addEventListener('click', () => {
+  const hash = refs?.head.hash ?? repo?.head.hash
+  if (hash) void jumpTo(hash)
+})
 tabButton.addEventListener('click', async () => {
   try {
     const result = await api.openTab(repo?.workspaceId)

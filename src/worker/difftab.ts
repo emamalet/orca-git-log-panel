@@ -26,7 +26,9 @@ export function validDiffRequest(input: unknown): DiffTabRequest {
   if (!Array.isArray(req.files) || !req.files.length || req.files.length > 20_000) throw new Error('Invalid diff request.')
   const files = req.files.map((f) => {
     if (!isText(f?.path) || !isText(f?.status) || (f.oldPath !== undefined && !isText(f.oldPath))) throw new Error('Invalid diff request.')
-    return { status: f.status, path: f.path, ...(f.oldPath ? { oldPath: f.oldPath } : {}) }
+    const commit = (value: unknown) => typeof value === 'string' && /^[0-9a-f]{40}$/.test(value)
+    if ((f.base !== undefined || f.tip !== undefined) && !(commit(f.base) && commit(f.tip))) throw new Error('Invalid diff request.')
+    return { status: f.status, path: f.path, ...(f.oldPath ? { oldPath: f.oldPath } : {}), ...(f.base ? { base: f.base, tip: f.tip } : {}) }
   })
   const index = Math.floor(Number(req.index))
   if (!(index >= 0 && index < files.length)) throw new Error('Invalid diff request.')

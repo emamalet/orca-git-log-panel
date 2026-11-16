@@ -22,6 +22,14 @@ a details pane with file diffs, and a right-click menu to rewrite history on a m
 - **Branch tree**: Local, Remote and Tags; click a branch to show only its commits (click it again, or
   **Show all**, to see every branch; Ctrl+click to show several), double-click it or use its locate
   button to jump to its latest commit, right-click to check it out. The shown branches are highlighted.
+  Branches named with slashes (`feature/auth`) are grouped in folders. Right-click a branch to check it
+  out, merge it into the current branch, rebase the current branch onto it, rename or delete it.
+- **Status, Fetch and Push**: the toolbar shows the current branch, how many commits it is behind (↙)
+  and ahead (↗) of its upstream, and any rebase/merge in progress (click it to jump to HEAD). **Fetch**
+  runs `git fetch --all --prune`; **Push** lists the commits to send, lets you pick the remote and the
+  remote branch (publishing a new branch sets its upstream), and warns before a force push
+  (`--force-with-lease`) when the remote has commits you do not have.
+- **Safe checkout**: with uncommitted changes, choose to stash them first or carry them over.
 - **Details pane**: message, author, committer, refs and parents of the selected commit, and its changed
   files as a folder tree (single-child folders joined, file counts, fold/unfold, expand/collapse all).
 - **Diff viewer**: double-click a changed file (or press Enter on it) to open what the commit changed
@@ -29,7 +37,8 @@ a details pane with file diffs, and a right-click menu to rewrite history on a m
   jump between changes with F7 / Shift+F7 and between files with Alt+↑ / Alt+↓. Where a tab cannot open
   (no local workspace), it shows over the log instead and Esc closes it.
   Merge commits are compared with their first parent.
-- **Multi-select**: click, Ctrl/⌘-click, Shift-click, arrows, Page Up/Down, Home/End, Ctrl+A.
+- **Multi-select**: click, Ctrl/⌘-click, Shift-click, arrows, Page Up/Down, Home/End, Ctrl+A. The details
+  pane then lists every file the selected commits change, and its diff spans the whole selection.
 - **Right-click menu** with icons (or Shift+F10):
   - Copy Revision Number (Ctrl+C), Cherry-Pick, Create Patch… (`git format-patch` of the selection,
     oldest first, saved to a file or copied to the clipboard)

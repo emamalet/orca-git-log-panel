@@ -25,7 +25,7 @@ export function renderBranches(container: HTMLElement, host: BranchesHost, query
   const rows: HTMLElement[] = []
   const matches = (name: string) => !q || name.toLowerCase().includes(q)
 
-  const group = (id: string, label: string, depth: number, count: number) => {
+  const group = (id: string, label: string, depth: number, count: number, folder = false) => {
     const open = q !== '' || !host.collapsed.has(id)
     rows.push(
       h(
@@ -40,6 +40,7 @@ export function renderBranches(container: HTMLElement, host: BranchesHost, query
           }
         },
         h('span', { class: 'twisty' }, icon(open ? 'chevronDown' : 'chevronRight')),
+        folder ? icon('folder', 'ic-folder') : null,
         h('span', { class: 'label' }, label),
         h('span', { class: 'count' }, String(count))
       )
@@ -104,16 +105,35 @@ export function renderBranches(container: HTMLElement, host: BranchesHost, query
     leaf({ name: 'HEAD', full: 'HEAD', hash: refs.head.hash }, 'head', 'HEAD (Current Branch)', 0, true)
   }
 
+  /** Branches as folders by name prefix (`feature/x` under `feature`), folders first. */
+  const nested = (items: { ref: BranchRef; rest: string }[], id: string, depth: number, kind: 'local' | 'remote') => {
+    const folders = new Map<string, { ref: BranchRef; rest: string }[]>()
+    const plain: { ref: BranchRef; rest: string }[] = []
+    for (const item of items) {
+      const slash = item.rest.indexOf('/')
+      if (slash < 0) plain.push(item)
+      else {
+        const key = item.rest.slice(0, slash)
+        if (!folders.has(key)) folders.set(key, [])
+        folders.get(key)!.push({ ref: item.ref, rest: item.rest.slice(slash + 1) })
+      }
+    }
+    for (const [name, list] of [...folders].sort(([a], [b]) => a.localeCompare(b))) {
+      if (group(`${id}/${name}`, name, depth, list.length, true)) nested(list, `${id}/${name}`, depth + 1, kind)
+    }
+    for (const { ref, rest } of plain) leaf(ref, kind, rest, depth, kind === 'local' && ref.name === refs.head.branch)
+  }
+
   const locals = refs.locals.filter((r) => matches(r.name))
   if (locals.length && group('local', 'Local', 0, locals.length)) {
-    for (const ref of locals) leaf(ref, 'local', ref.name, 1, ref.name === refs.head.branch)
+    nested(locals.map((ref) => ({ ref, rest: ref.name })), 'local', 1, 'local')
   }
 
   const remotes = refs.remotes.filter((r) => matches(r.name))
   if (remotes.length && group('remote', 'Remote', 0, remotes.length)) {
     for (const [remote, list] of groupRemotes(remotes)) {
       if (group(`remote/${remote}`, remote, 1, list.length)) {
-        for (const ref of list) leaf(ref, 'remote', ref.name.slice(remote.length + 1), 2)
+        nested(list.map((ref) => ({ ref, rest: ref.name.slice(remote.length + 1) })), `remote/${remote}`, 2, 'remote')
       }
     }
   }

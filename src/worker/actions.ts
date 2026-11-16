@@ -1,6 +1,7 @@
 import type { ActionRequest, ActionResult, CheckResult, RewriteKind } from '../shared/protocol.ts'
 import { lastLines, type Git } from './git.ts'
 import { readHead } from './log.ts'
+import { fetchAll, push } from './push.ts'
 import {
   operationInProgress,
   planFor,
@@ -19,6 +20,35 @@ function assertHashes(hashes: unknown): string[] {
     throw new Error('Invalid commit selection.')
   }
   return hashes as string[]
+}
+
+/** `name` if it is an existing local branch. */
+async function localBranch(git: Git, name: unknown): Promise<string> {
+  if (typeof name !== 'string' || !name || name.startsWith('-') || !(await git.run(['show-ref', '--verify', '--quiet', `refs/heads/${name}`])).ok) {
+    throw new Error(`No local branch ${String(name)}.`)
+  }
+  return name
+}
+
+/** `ref` if it is the full name of an existing local or remote-tracking branch. */
+async function branchRef(git: Git, ref: unknown): Promise<string> {
+  if (typeof ref !== 'string' || !/^refs\/(heads|remotes)\//.test(ref) || !(await git.run(['show-ref', '--verify', '--quiet', ref])).ok) {
+    throw new Error(`No branch ${String(ref)}.`)
+  }
+  return ref
+}
+
+/** Tracked files with uncommitted changes (untracked files never block a checkout git can do). */
+export async function dirtyFiles(git: Git): Promise<string[]> {
+  const entries = (await git.out(['status', '--porcelain', '-z', '--untracked-files=no'])).split('\0')
+  const files: string[] = []
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i]
+    if (entry.length < 4) continue
+    files.push(entry.slice(3))
+    if (entry[0] === 'R' || entry[0] === 'C') i++
+  }
+  return files
 }
 
 async function assertName(git: Git, name: string, kind: 'branch' | 'tag'): Promise<string> {
@@ -108,13 +138,16 @@ async function rewrite(git: Git, action: Extract<ActionRequest, { kind: 'squash'
   }
 }
 
+/** Thrown when `git branch -d` refuses an unmerged branch, so the UI can offer to force it. */
+class NeedsForce extends Error {}
+
 export async function runAction(git: Git, action: ActionRequest): Promise<ActionResult> {
   const previousHead = (await readHead(git)).hash ?? undefined
   try {
     const message = await perform(git, action)
     return { ok: true, message, ...(previousHead ? { previousHead } : {}) }
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+    return { ok: false, message: error instanceof Error ? error.message : String(error), ...(error instanceof NeedsForce ? { needsForce: true } : {}) }
   }
 }
 
@@ -123,10 +156,63 @@ async function perform(git: Git, action: ActionRequest): Promise<string> {
     case 'checkout': {
       const target = action.target?.trim()
       if (!target || target.startsWith('-')) throw new Error('Invalid checkout target.')
-      if (HASH.test(target)) await git.out(['checkout', '--detach', target, '--'])
-      else await git.out(['checkout', target, '--'])
-      return `Checked out ${HASH.test(target) ? target.slice(0, 8) : target}.`
+      const label = HASH.test(target) ? target.slice(0, 8) : target
+      const args = HASH.test(target) ? ['checkout', '--detach', target, '--'] : ['checkout', target, '--']
+      if (!action.stash || !(await dirtyFiles(git)).length) {
+        await git.out(args)
+        return `Checked out ${label}.`
+      }
+      await git.out(['stash', 'push', '-m', `git-log: before checking out ${label}`])
+      const result = await git.run(args)
+      if (!result.ok) {
+        await git.run(['stash', 'pop', '--index'])
+        throw new Error(`Checkout failed; your changes were restored.\n${lastLines(result.stderr || result.stdout, 4)}`)
+      }
+      return `Checked out ${label}. Your changes were stashed (git stash pop restores them).`
     }
+    case 'renameBranch': {
+      const name = await localBranch(git, action.name)
+      const newName = await assertName(git, action.newName, 'branch')
+      await git.out(['branch', '-m', name, newName])
+      return `Renamed ${name} to ${newName}.`
+    }
+    case 'deleteBranch': {
+      const name = await localBranch(git, action.name)
+      if ((await readHead(git)).branch === name) throw new Error('The current branch cannot be deleted.')
+      const result = await git.run(['branch', action.force ? '-D' : '-d', name])
+      if (!result.ok) {
+        if (/not fully merged/i.test(result.stderr)) throw new NeedsForce(`${name} is not fully merged.`)
+        throw new Error(lastLines(result.stderr || result.stdout, 4) || `Could not delete ${name}.`)
+      }
+      return `Deleted branch ${name}.`
+    }
+    case 'merge':
+    case 'rebaseOnto': {
+      const ref = await branchRef(git, action.ref)
+      const operation = await operationInProgress(git)
+      if (operation) throw new Error(`A ${operation} is in progress. Finish or abort it first.`)
+      const short = ref.replace(/^refs\/(heads|remotes)\//, '')
+      if (action.kind === 'merge') {
+        const result = await git.run(['merge', '--no-edit', ref], { timeoutMs: 120_000 })
+        if (!result.ok) {
+          const reason = lastLines(result.stderr || result.stdout, 4)
+          if ((await operationInProgress(git)) === 'merge') await git.run(['merge', '--abort'])
+          throw new Error(`Merging ${short} failed and was aborted.${reason ? `\n${reason}` : ''}`)
+        }
+        return /Already up to date/i.test(result.stdout) ? `Already up to date with ${short}.` : `Merged ${short} into the current branch.`
+      }
+      const result = await git.run(['rebase', '--autostash', ref], { timeoutMs: 120_000 })
+      if (!result.ok) {
+        const reason = lastLines(result.stderr || result.stdout, 4)
+        if ((await operationInProgress(git)) === 'rebase') await git.run(['rebase', '--abort'])
+        throw new Error(`Rebasing onto ${short} failed and was aborted.${reason ? `\n${reason}` : ''}`)
+      }
+      return `Rebased the current branch onto ${short}.`
+    }
+    case 'fetch':
+      return fetchAll(git)
+    case 'push':
+      return push(git, action)
     case 'branch': {
       const [hash] = assertHashes([action.hash])
       const name = await assertName(git, action.name, 'branch')

@@ -6,7 +6,8 @@ import { join } from 'node:path'
 import { after, test } from 'node:test'
 import { checkRewrite, runAction } from './actions.ts'
 import { createGit } from './git.ts'
-import { readDetails, readLogPage, readRefs } from './log.ts'
+import { readDetails, readLogPage, readRefs, readSelectionFiles } from './log.ts'
+import { checkPush } from './push.ts'
 import { readFileDiff } from './diff.ts'
 import { createPatch } from './patch.ts'
 import { diffAnchorName, pickWorkspace, validDiffRequest, writeDiffAnchor } from './difftab.ts'
@@ -260,4 +261,89 @@ test('diff tab anchors are named after the file and commit, with the folder when
   assert.deepEqual(JSON.parse(readFileSync(join(dir, path), 'utf8')), { root: dir, hash: '0123456789abcdef', files, index: 1 })
   assert.throws(() => validDiffRequest({ root: dir, hash: 'zz', files, index: 0 }))
   rmSync(dir, { recursive: true, force: true })
+})
+
+test('push sends HEAD, publishes the branch and reports ahead/behind', async () => {
+  const { root } = repo(2)
+  const remote = mkdtempSync(join(tmpdir(), 'git-log-remote-'))
+  dirs.push(remote)
+  sh(remote, 'init', '-q', '--bare')
+  sh(root, 'remote', 'add', 'origin', remote)
+  const git = createGit(root)
+  const plan = await checkPush(git)
+  assert.ok(plan.ok)
+  assert.equal(plan.publish, true)
+  assert.equal(plan.commits.length, 2)
+  const pushed = await runAction(git, { kind: 'push', branch: plan.branch, hash: plan.hash, remote: plan.remote, remoteBranch: plan.remoteBranch, setUpstream: true })
+  assert.equal(pushed.ok, true, pushed.message)
+  assert.equal(sh(root, `--git-dir=${remote}`, 'rev-parse', 'main'), plan.hash)
+  writeFileSync(join(root, 'f3.txt'), '3\n')
+  sh(root, 'add', '.')
+  sh(root, 'commit', '-q', '-m', 'c3')
+  const refs = await readRefs(git)
+  assert.deepEqual(refs.status, { upstream: 'origin/main', ahead: 1, behind: 0 })
+  const next = await checkPush(git)
+  assert.ok(next.ok)
+  assert.equal(next.publish, false)
+  assert.deepEqual(next.commits.map((c) => c.subject), ['c3'])
+  sh(root, 'reset', '-q', '--hard', 'HEAD~2')
+  const diverged = await checkPush(git)
+  assert.ok(diverged.ok)
+  assert.equal(diverged.lost.length, 1)
+  const refused = await runAction(git, { kind: 'push', branch: 'main', hash: diverged.hash, remote: 'origin', remoteBranch: 'main', setUpstream: false })
+  assert.equal(refused.ok, false)
+  const forced = await runAction(git, { kind: 'push', branch: 'main', hash: diverged.hash, remote: 'origin', remoteBranch: 'main', setUpstream: false, force: true, expect: diverged.remoteHash! })
+  assert.equal(forced.ok, true, forced.message)
+  assert.equal(sh(root, `--git-dir=${remote}`, 'rev-parse', 'main'), diverged.hash)
+})
+
+test('deleting an unmerged branch asks for force; rename and merge work', async () => {
+  const { root, hashes } = repo(2)
+  const git = createGit(root)
+  sh(root, 'checkout', '-q', '-b', 'topic')
+  writeFileSync(join(root, 'topic.txt'), 'x\n')
+  sh(root, 'add', '.')
+  sh(root, 'commit', '-q', '-m', 'topic work')
+  sh(root, 'checkout', '-q', 'main')
+  assert.equal((await runAction(git, { kind: 'renameBranch', name: 'topic', newName: 'feature/topic' })).ok, true)
+  const refused = await runAction(git, { kind: 'deleteBranch', name: 'feature/topic' })
+  assert.equal(refused.ok, false)
+  assert.equal(refused.needsForce, true)
+  const merged = await runAction(git, { kind: 'merge', ref: 'refs/heads/feature/topic' })
+  assert.equal(merged.ok, true, merged.message)
+  assert.ok(files(root).includes('topic.txt'))
+  assert.equal((await runAction(git, { kind: 'deleteBranch', name: 'feature/topic' })).ok, true)
+  assert.equal((await runAction(git, { kind: 'deleteBranch', name: 'main' })).ok, false)
+  assert.equal(hashes.length, 2)
+})
+
+test('checkout with stash keeps the changes in a stash', async () => {
+  const { root, hashes } = repo(2)
+  const git = createGit(root)
+  sh(root, 'branch', 'other', hashes[0])
+  writeFileSync(join(root, 'f2.txt'), 'changed\n')
+  const blocked = await runAction(git, { kind: 'checkout', target: 'other' })
+  assert.equal(blocked.ok, false)
+  const done = await runAction(git, { kind: 'checkout', target: 'other', stash: true })
+  assert.equal(done.ok, true, done.message)
+  assert.equal(sh(root, 'rev-parse', '--abbrev-ref', 'HEAD'), 'other')
+  assert.match(sh(root, 'stash', 'list'), /before checking out other/)
+})
+
+test('selection files span the selected commits, with a diff per file range', async () => {
+  const { root, hashes } = repo(3)
+  writeFileSync(join(root, 'f1.txt'), '1\nmore\n')
+  sh(root, 'add', '.')
+  sh(root, 'commit', '-q', '-m', 'c4')
+  const c4 = sh(root, 'rev-parse', 'HEAD')
+  const git = createGit(root)
+  const selection = await readSelectionFiles(git, [c4, hashes[1]])
+  assert.deepEqual(selection.map((f) => [f.status, f.path]), [['M', 'f1.txt'], ['A', 'f2.txt']])
+  const f1 = selection[0]
+  assert.equal(f1.base, hashes[2])
+  assert.equal(f1.tip, c4)
+  const diff = await readFileDiff(git, c4, 'f1.txt', undefined, false, { base: f1.base!, tip: f1.tip! })
+  assert.deepEqual(diff.hunks[0].lines.filter((l) => l.kind === '+').map((l) => l.text), ['more'])
+  const root1 = await readSelectionFiles(git, [hashes[0]])
+  assert.equal(root1[0].base, '4b825dc642cb6eb9a060e54bf8d69288fbee4904')
 })

@@ -1461,3 +1461,128 @@ textarea.field {
   color: var(--fg);
   opacity: 0.75;
 }
+
+/* ---------- Branch status, Fetch & Push ---------- */
+
+.tool:disabled {
+  opacity: 0.4;
+  background: transparent;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  max-width: 260px;
+  padding: 0 8px;
+  margin-right: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--fg);
+  white-space: nowrap;
+}
+
+.status-chip:hover {
+  background: var(--hover);
+}
+
+.status-chip[hidden] {
+  display: none;
+}
+
+.status-chip .icon {
+  color: var(--ref-local);
+}
+
+.status-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.status-chip .behind {
+  color: var(--c0);
+  font-variant-numeric: tabular-nums;
+}
+
+.status-chip .ahead {
+  color: var(--c1);
+  font-variant-numeric: tabular-nums;
+}
+
+.status-chip .operation {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--c2) 28%, transparent);
+  color: var(--c2);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.push-target {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.push-target select.field {
+  width: auto;
+  flex: none;
+}
+
+.push-target input.field {
+  flex: 1;
+}
+
+.push-info:empty {
+  display: none;
+}
+
+.push-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.push-info .warning > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.push-list {
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+
+.push-list .file,
+.push-info .file {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.push-list .name,
+.push-info .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.help-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.node-row .ic-folder {
+  color: var(--muted-fg);
+}

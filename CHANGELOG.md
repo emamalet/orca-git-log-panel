@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 — 2026-11-16
+
+The toolbar now shows the current branch with how far it is behind and ahead of its upstream, and any
+rebase or merge in progress; new Fetch and Push buttons fetch every remote and push the current branch,
+with a dialog that lists the commits to send, lets you choose the remote and remote branch (publishing a
+new branch sets its upstream) and asks before a force push with lease. Right-clicking a branch can now
+merge it into the current branch, rebase the current branch onto it, rename it or delete it (asking
+again before deleting unmerged work). Checking out with uncommitted changes offers to stash them first.
+Selecting several commits lists every file they change, and opening one shows the combined diff. Branch
+names with slashes are grouped in folders, and opening a repository selects its HEAD commit.
 ## 0.2.0 — 2026-11-16
 
 The branches tree is easier to use: a single click now shows only that branch's commits (click it again,
