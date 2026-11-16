@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.10 — 2026-11-16
+
+No change to the panel itself: the project now has contribution guidelines (CONTRIBUTING.md, plus
+AGENTS.md / CLAUDE.md for AI assistants) and a GitHub Action that requires every change to main to bump
+the version and add a changelog entry, then tags and publishes the release automatically.
+
 ## 0.1.9 — 2026-11-16
 
 Fixed the panel freezing (Orca reporting that Git Log stopped responding) when clicking or double-clicking

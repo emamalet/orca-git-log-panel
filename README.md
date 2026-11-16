@@ -65,7 +65,11 @@ orca plugin dev load .          # prints a fingerprint; re-run with --approve <f
 orca plugin test .              # worker and graph tests on temporary repositories
 orca plugin validate .
 orca plugin shot local.git-log --panel log
+node scripts/check-release.mjs  # version bump + changelog entry, required on main
 ```
+
+Contributions are welcome: read [CONTRIBUTING.md](CONTRIBUTING.md) first (every change to `main`
+ships as a new version with a changelog entry).
 
 ## How history rewriting works
 

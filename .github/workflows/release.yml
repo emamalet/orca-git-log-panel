@@ -1,0 +1,44 @@
+name: Release
+
+# Every change reaching main must bump the version (orca-plugin.json + package.json) and add a
+# CHANGELOG.md entry; once on main, the matching vX.Y.Z tag and GitHub release are created here.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check version bump and changelog
+        run: node scripts/check-release.mjs "${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}"
+
+      - name: Tag and publish the release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./orca-plugin.json').version")
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            echo "Tag v$version already exists"
+          else
+            git tag "v$version" "$GITHUB_SHA"
+            git push origin "v$version"
+          fi
+          if ! gh release view "v$version" >/dev/null 2>&1; then
+            node -e "const t=require('fs').readFileSync('CHANGELOG.md','utf8');const v=process.argv[1];const m=t.split(/^## /m).find(s=>s.startsWith(v+' '));process.stdout.write(m?m.slice(m.indexOf('\n')).trim():'')" "$version" > notes.md
+            gh release create "v$version" --title "v$version" --notes-file notes.md --verify-tag
+          fi
