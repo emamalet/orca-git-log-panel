@@ -8,10 +8,10 @@ export interface BranchesHost {
   filtered: string[]
   collapsed: Set<string>
   onCollapse(): void
-  /** Single click: select the commit in the log. */
+  /** Double click or the locate button: select the ref's commit in the log. */
   select(hash: string): void
-  /** Double click: show only this ref. */
-  filterTo(full: string): void
+  /** Click: show only this ref (again: show all); additive (Ctrl/Cmd+click) adds or removes it. */
+  toggleFilter(full: string, additive: boolean): void
   menu(event: MouseEvent, ref: BranchRef & { kind: 'local' | 'remote' | 'tag' | 'head' }): void
 }
 
@@ -49,15 +49,28 @@ export function renderBranches(container: HTMLElement, host: BranchesHost, query
 
   const leaf = (ref: BranchRef, kind: 'local' | 'remote' | 'tag' | 'head', label: string, depth: number, current = false) => {
     const filtered = host.filtered.includes(ref.full)
+    const what = kind === 'tag' ? 'tag' : 'branch'
     rows.push(
       h(
         'div',
         {
-          class: `node-row${filtered ? ' filtered' : ''}`,
+          class: `node-row leaf${filtered ? ' filtered' : ''}`,
           style: `padding-left:${4 + depth * 14 + 16}px`,
-          title: `${ref.full}${ref.upstream ? `\nTracking ${ref.upstream}` : ''}\nDouble-click to show only this ${kind === 'tag' ? 'tag' : 'branch'}`,
-          onclick: () => ref.hash && host.select(ref.hash),
-          ondblclick: () => host.filterTo(ref.full),
+          role: 'treeitem',
+          'aria-selected': String(filtered),
+          title: [
+            ref.full + (ref.upstream ? `\nTracking ${ref.upstream}` : ''),
+            '',
+            filtered ? 'Click: show all branches again' : `Click: show only this ${what}`,
+            `Ctrl+click: ${filtered ? 'remove it from' : 'add it to'} the shown branches`,
+            'Double-click: go to its latest commit'
+          ].join('\n'),
+          onclick: (event: MouseEvent) => {
+            // The second click of a double-click must not undo the first one.
+            if (event.detail > 1) return
+            host.toggleFilter(ref.full, event.ctrlKey || event.metaKey)
+          },
+          ondblclick: () => ref.hash && host.select(ref.hash),
           oncontextmenu: (event: MouseEvent) => {
             event.preventDefault()
             host.menu(event, { ...ref, kind })
@@ -65,7 +78,24 @@ export function renderBranches(container: HTMLElement, host: BranchesHost, query
         },
         current ? icon('star', 'ic-head') : icon(kind === 'tag' ? 'tag' : 'branch', `ic-${kind}`),
         h('span', { class: 'label' }, label),
-        ref.upstream && kind === 'local' ? h('span', { class: 'track' }, `→ ${ref.upstream.replace(/^refs\/remotes\//, '')}`) : null
+        ref.upstream && kind === 'local' ? h('span', { class: 'track' }, `→ ${ref.upstream.replace(/^refs\/remotes\//, '')}`) : null,
+        h('span', { class: 'spacer' }),
+        ref.hash
+          ? h(
+              'button',
+              {
+                class: 'node-action',
+                title: 'Go to its latest commit',
+                onclick: (event: MouseEvent) => {
+                  event.stopPropagation()
+                  host.select(ref.hash!)
+                },
+                ondblclick: (event: MouseEvent) => event.stopPropagation()
+              },
+              icon('locate')
+            )
+          : null,
+        filtered ? icon('filter', 'ic-filtered') : null
       )
     )
   }

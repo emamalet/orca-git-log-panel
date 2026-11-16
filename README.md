@@ -19,8 +19,9 @@ a details pane with file diffs, and a right-click menu to rewrite history on a m
 - **Commit graph**: colored lanes, merges, ref labels (`origin & main`, tags, HEAD), commits not
   reachable from HEAD are dimmed.
 - **Filters**: text or hash (with regex `.*` and match case `Cc`), Branch, User, Date and Paths.
-- **Branch tree**: Local, Remote and Tags; click a branch to jump to its commit, double-click to show
-  only that branch, right-click to check it out.
+- **Branch tree**: Local, Remote and Tags; click a branch to show only its commits (click it again, or
+  **Show all**, to see every branch; Ctrl+click to show several), double-click it or use its locate
+  button to jump to its latest commit, right-click to check it out. The shown branches are highlighted.
 - **Details pane**: message, author, committer, refs and parents of the selected commit, and its changed
   files as a folder tree (single-child folders joined, file counts, fold/unfold, expand/collapse all).
 - **Diff viewer**: double-click a changed file (or press Enter on it) to open what the commit changed

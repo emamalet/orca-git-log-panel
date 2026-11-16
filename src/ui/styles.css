@@ -16,6 +16,8 @@
   --selection: color-mix(in srgb, var(--primary) 32%, transparent);
   --selection-inactive: color-mix(in srgb, var(--fg) 12%, transparent);
   --hover: color-mix(in srgb, var(--fg) 6%, transparent);
+  --tree-hover: color-mix(in srgb, var(--fg) 9%, transparent);
+  --tree-selected: color-mix(in srgb, var(--fg) 15%, transparent);
   --row-h: 24px;
   --c0: #4c8cf5;
   --c1: #5fb865;
@@ -310,17 +312,92 @@ textarea {
   align-items: center;
   gap: 4px;
   height: 22px;
-  padding-right: 8px;
+  padding-right: 6px;
   white-space: nowrap;
-  cursor: default;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 4px;
+  margin: 0 4px;
 }
 
 .node-row:hover {
-  background: var(--hover);
+  background: var(--tree-hover);
 }
 
 .node-row.active {
   background: var(--selection-inactive);
+}
+
+.node-row .spacer {
+  flex: 1;
+}
+
+.node-row .node-action {
+  display: none;
+  border: 0;
+  background: none;
+  padding: 1px;
+  border-radius: 3px;
+  color: var(--muted-fg);
+  cursor: pointer;
+}
+
+.node-row:hover .node-action {
+  display: inline-flex;
+}
+
+.node-row .node-action:hover {
+  color: var(--fg);
+  background: var(--hover);
+}
+
+.node-row.filtered {
+  background: var(--tree-selected);
+  box-shadow: inset 2px 0 0 var(--fg);
+}
+
+.node-row.filtered:hover {
+  background: color-mix(in srgb, var(--fg) 20%, transparent);
+}
+
+.node-row .ic-filtered {
+  color: var(--fg);
+  flex: none;
+}
+
+.tree-showing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px 6px;
+  font-size: 11px;
+  color: var(--muted-fg);
+  min-height: 18px;
+  white-space: nowrap;
+}
+
+.tree-showing .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-showing .hint {
+  margin-left: auto;
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-showing.on {
+  color: var(--fg);
+}
+
+.tree-showing .link {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--fg);
+  text-decoration: underline;
+  flex: none;
 }
 
 .node-row .twisty {
@@ -366,7 +443,7 @@ textarea {
 }
 
 .node-row.filtered .label {
-  color: var(--primary);
+  color: var(--fg);
   font-weight: 600;
 }
 

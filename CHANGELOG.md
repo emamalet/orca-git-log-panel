@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0 — 2026-11-16
+
+The branches tree is easier to use: a single click now shows only that branch's commits (click it again,
+or Show all, to see every branch; Ctrl+click shows several), and a double-click or the locate button that
+appears on hover jumps to its latest commit. The shown branches are clearly highlighted with a filter
+mark, rows react on hover, and a line above the tree says which branches are shown. The Open in editor tab
+button now sits to the right of Show details.
+
 ## 0.1.10 — 2026-11-16
 
 No change to the panel itself: the project now has contribution guidelines (CONTRIBUTING.md, plus

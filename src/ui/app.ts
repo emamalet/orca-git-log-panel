@@ -104,8 +104,8 @@ const toolbar = h(
   ...filterBar.elements,
   h('div', { class: 'spacer' }),
   refreshButton,
-  MODE === 'panel' ? tabButton : null,
-  detailsToggle
+  detailsToggle,
+  MODE === 'panel' ? tabButton : null
 )
 
 const bannerText = h('div', { class: 'text' })
@@ -119,8 +119,9 @@ const banner = h(
 )
 
 const treeSearch = h('input', { class: 'field tree-search', placeholder: 'Search branches', spellcheck: false }) as HTMLInputElement
-const tree = h('div', { class: 'tree' })
-const branchesPane = h('aside', { class: 'pane branches' }, treeSearch, tree)
+const tree = h('div', { class: 'tree', role: 'tree' })
+const treeShowing = h('div', { class: 'tree-showing' })
+const branchesPane = h('aside', { class: 'pane branches' }, treeSearch, treeShowing, tree)
 const branchesSplit = h('div', { class: 'splitter' })
 
 const header = h(
@@ -556,11 +557,27 @@ if (prefs.matchCase) filter.matchCase = true
 // ---------- Branches tree ----------
 
 function renderTree(): void {
+  const shown = filter.branches ?? []
+  treeShowing.replaceChildren(
+    ...(shown.length
+      ? [
+          icon('filter'),
+          h(
+            'span',
+            { class: 'label', title: shown.join('\n') },
+            'Showing ',
+            h('strong', null, shown.map((full) => full.replace(/^refs\/(heads|remotes|tags)\//, '')).join(', '))
+          ),
+          h('button', { class: 'link', onclick: () => applyFilter({ branches: [] }) }, 'Show all')
+        ]
+      : [h('span', { class: 'label' }, 'All branches'), h('span', { class: 'hint' }, 'Click a branch to show only it')])
+  )
+  treeShowing.classList.toggle('on', shown.length > 0)
   renderBranches(
     tree,
     {
       refs,
-      filtered: filter.branches ?? [],
+      filtered: shown,
       collapsed,
       onCollapse: () => {
         prefs.collapsed = [...collapsed]
@@ -568,7 +585,16 @@ function renderTree(): void {
         renderTree()
       },
       select: (hash) => void jumpTo(hash),
-      filterTo: (full) => applyFilter({ branches: filter.branches?.length === 1 && filter.branches[0] === full ? [] : [full] }),
+      toggleFilter: (full, additive) => {
+        const next = additive
+          ? shown.includes(full)
+            ? shown.filter((b) => b !== full)
+            : [...shown, full]
+          : shown.length === 1 && shown[0] === full
+            ? []
+            : [full]
+        applyFilter({ branches: next })
+      },
       menu: (event, ref) => branchMenu(event, ref)
     },
     treeSearch.value

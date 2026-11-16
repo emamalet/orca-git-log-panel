@@ -63,6 +63,8 @@ export const ICONS = {
   squash: stroke('M8 1.5V6M5.5 3.5L8 6l2.5-2.5M8 14.5V10M5.5 12.5L8 10l2.5 2.5M3 8h10'),
   drop: stroke('M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4M6.5 6.5v5M9.5 6.5v5'),
   rebase: stroke('M2.5 4h7M2.5 8h7M2.5 12h7M12.5 3v10M10.5 11l2 2 2-2'),
+  filter: stroke('M2.5 3h11L9.5 8v5l-3-1.5V8z'),
+  locate: `<circle cx="8" cy="8" r="2" fill="currentColor"/>${stroke('M8 1.5v3M8 11.5v3M1.5 8h3M11.5 8h3')}<circle cx="8" cy="8" r="4.5" fill="none" stroke="currentColor" stroke-width="1.2"/>`,
   patch: stroke('M4 2h5l3 3v9H4zM9 2v3h3M6.5 8h3M8 6.5v3M6.5 11.5h3')
 } as const
 
