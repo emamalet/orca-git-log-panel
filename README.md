@@ -90,8 +90,10 @@ a conflict it is aborted, and the branch is left exactly as it was.
 
 ## Limitations
 
-- Local workspaces only: SSH and paired-host workspaces are not supported yet. WSL folders opened from
-  Windows (`\\wsl.localhost\...`) work through Git for Windows, which is slower there than inside WSL.
+- Local workspaces only: SSH and paired-host workspaces are not supported yet. On Windows, WSL
+  workspaces (both Orca's WSL environment and WSL folders opened as `\\wsl.localhost\...`) work: git
+  runs inside the distro through `wsl.exe` (the `gitPath` setting does not apply there), and since
+  Windows cannot watch WSL folders, the log checks for new commits every few seconds instead.
 - The diff viewer is read-only, and very large diffs are cut after 20,000 lines.
 - Conflicts during a rewrite, cherry-pick or revert are not resolved in the panel; the operation is
   aborted (or, when Git is left mid-operation by a terminal command, a banner says so).

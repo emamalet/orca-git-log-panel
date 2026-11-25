@@ -1,5 +1,4 @@
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { PlanItem, RangeCommit, RewriteKind } from '../shared/protocol.ts'
 import { lastLines, type Git } from './git.ts'
@@ -148,8 +147,10 @@ export function buildTodo(
   return lines.join('\n') + '\n'
 }
 
-export async function gitPath(git: Git, name: string): Promise<string> {
-  return (await git.out(['rev-parse', '--path-format=absolute', '--git-path', name])).trim()
+/** Absolute paths of `names` inside the git dir, in one git call. */
+export async function gitPaths(git: Git, names: string[]): Promise<string[]> {
+  const out = await git.out(['rev-parse', '--path-format=absolute', ...names.flatMap((name) => ['--git-path', name])])
+  return out.split(/\r?\n/).filter(Boolean).map((path) => git.fromGit(path.trim()))
 }
 
 export async function operationInProgress(git: Git): Promise<'rebase' | 'merge' | 'cherry-pick' | 'revert' | null> {
@@ -160,7 +161,8 @@ export async function operationInProgress(git: Git): Promise<'rebase' | 'merge' 
     ['CHERRY_PICK_HEAD', 'cherry-pick'],
     ['REVERT_HEAD', 'revert']
   ]
-  for (const [name, kind] of checks) if (existsSync(await gitPath(git, name))) return kind
+  const paths = await gitPaths(git, checks.map(([name]) => name))
+  for (const [i, [, kind]] of checks.entries()) if (existsSync(paths[i])) return kind
   return null
 }
 
@@ -172,13 +174,13 @@ export async function pushedTo(git: Git, hash: string): Promise<string[]> {
 
 /** Runs `git rebase -i` with `todo` as the whole todo list; aborts and throws on any failure. */
 export async function runRebase(git: Git, base: string | null, plan: PlanItem[], messages: Map<string, string>): Promise<void> {
-  const dir = mkdtempSync(join(tmpdir(), 'orca-git-log-'))
+  const dir = mkdtempSync(join(git.tempDir(), 'orca-git-log-'))
   try {
     let count = 0
     const todo = buildTodo(plan, messages, (text) => {
       const file = join(dir, `message-${++count}.txt`)
       writeFileSync(file, text.endsWith('\n') ? text : text + '\n')
-      return file
+      return git.toGit(file)
     })
     const todoFile = join(dir, 'todo')
     writeFileSync(todoFile, todo)
@@ -192,7 +194,7 @@ export async function runRebase(git: Git, base: string | null, plan: PlanItem[],
         base ?? '--root'
       ],
       {
-        env: { GIT_SEQUENCE_EDITOR: `cp ${shQuote(todoFile)}`, GIT_EDITOR: ':' },
+        env: { GIT_SEQUENCE_EDITOR: `cp ${shQuote(git.toGit(todoFile))}`, GIT_EDITOR: ':' },
         timeoutMs: 120_000
       }
     )

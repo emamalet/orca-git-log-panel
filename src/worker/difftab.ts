@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, relative } from 'node:path'
 import type { DiffTabRequest, FileChange } from '../shared/protocol.ts'
-import type { ListedWorkspace, Workspace } from './repo.ts'
+import { isLocal, type ListedWorkspace, type Workspace } from './repo.ts'
 
 /** Folder, inside the workspace, holding the small files that diff tabs open. */
 export const DIFF_DIR = '.orca-git-log'
@@ -37,7 +37,7 @@ export function validDiffRequest(input: unknown): DiffTabRequest {
 
 /** The local workspace to put the anchor in: the one asked for, else the one rooted at `root`. */
 export function pickWorkspace(workspaces: ListedWorkspace[], root: string, prefer?: string): Workspace | null {
-  const local = workspaces.filter((w) => (!w.hostId || w.hostId === 'local') && existsSync(w.path))
+  const local = workspaces.filter(isLocal)
   const at = (w: ListedWorkspace) => relative(root, w.path)
   const inside = (w: ListedWorkspace) => !at(w).startsWith('..') && !isAbsolute(at(w))
   const found = local.find((w) => w.id === prefer && inside(w)) ?? local.find((w) => at(w) === '') ?? local.find(inside)
