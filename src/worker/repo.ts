@@ -5,6 +5,7 @@ import type { RepoInfo, RepoResult, WorkspaceChoice } from '../shared/protocol.t
 import { createGit, type Git } from './git.ts'
 import { readHead } from './log.ts'
 import { operationInProgress } from './rebase.ts'
+import { listWslWorkspaces, type WslWorkspace } from './wsl.ts'
 
 export interface Workspace {
   id: string
@@ -17,9 +18,12 @@ export interface ListedWorkspace {
   path: string
   branch: string | null
   hostId: string | null
+  /** A workspace of Orca's WSL environment, listed through the orca CLI with a \\wsl.localhost path. */
+  wsl?: boolean
 }
 
 interface Context {
+  workspaceId?: string
   branch: string
   displayName: string
   terminals?: { id: string; title?: string }[]
@@ -29,7 +33,30 @@ export type Match = { workspace: ListedWorkspace } | { remote: true } | { ambigu
 
 const shortBranch = (branch: string | null | undefined) => (branch ?? '').replace(/^refs\/heads\//, '')
 const slashes = (path: string) => path.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
-const isLocal = (w: ListedWorkspace) => (!w.hostId || w.hostId === 'local') && existsSync(w.path)
+export const isLocal = (w: ListedWorkspace) => (w.wsl || !w.hostId || w.hostId === 'local') && existsSync(w.path)
+
+const WSL_LIST_MS = 60_000
+let wslList: { at: number; rows: Promise<ListedWorkspace[]> } | null = null
+
+/**
+ * `workspace.list`, plus on Windows the workspaces of Orca's WSL environments, which it leaves out.
+ * Listing those takes the orca CLI a second or two, so they are kept for a minute unless `fresh`.
+ */
+export async function listWorkspaces(
+  orca: OrcaWorkerApi,
+  { fresh = false, platform = process.platform, listWsl = listWslWorkspaces }: { fresh?: boolean; platform?: string; listWsl?: () => Promise<WslWorkspace[]> } = {}
+): Promise<ListedWorkspace[]> {
+  const { workspaces } = (await orca.host.call('workspace.list', {})) as { workspaces: ListedWorkspace[] }
+  if (platform !== 'win32') return workspaces
+  if (fresh || !wslList || Date.now() - wslList.at > WSL_LIST_MS) {
+    const rows = listWsl()
+      .then((list) => list.map((w): ListedWorkspace => ({ ...w, wsl: true })))
+      .catch(() => [])
+    wslList = { at: Date.now(), rows }
+  }
+  const known = new Set(workspaces.map((w) => w.id))
+  return workspaces.concat((await wslList.rows).filter((w) => !known.has(w.id)))
+}
 
 /** True when `text` names `path` (Windows or MSYS spelling), not just a longer sibling path. */
 export function mentions(text: string, path: string): boolean {
@@ -57,6 +84,8 @@ export function mentions(text: string, path: string): boolean {
  * show (shells usually print their cwd there), then by `prefer` (a previous choice).
  */
 export function matchWorkspace(context: Context, workspaces: ListedWorkspace[], prefer?: string | null): Match {
+  const exact = context.workspaceId ? workspaces.find((w) => w.id === context.workspaceId && w.wsl && isLocal(w)) : undefined
+  if (exact) return { workspace: exact }
   const named = workspaces.filter((w) => w.name === context.displayName)
   let pool = named.length ? named : workspaces.filter((w) => basename(w.path) === context.displayName)
   const sameBranch = pool.filter((w) => shortBranch(w.branch) === shortBranch(context.branch))
@@ -81,10 +110,11 @@ export async function focusedWorkspace(
 ): Promise<Workspace | { reason: string; choices?: WorkspaceChoice[] }> {
   const context = (await orca.host.call('workspace.readContext', {})) as Context | null
   if (!context) return { reason: 'Open a workspace to see its Git log.' }
-  const { workspaces } = (await orca.host.call('workspace.list', {})) as { workspaces: ListedWorkspace[] }
-  const match = matchWorkspace(context, workspaces, prefer ?? lastChoice)
+  let match = matchWorkspace(context, await listWorkspaces(orca), prefer ?? lastChoice)
+  // A WSL workspace added since the list was kept.
+  if ((!match || 'remote' in match) && process.platform === 'win32' && wslList && Date.now() - wslList.at > 5000) match =matchWorkspace(context, await listWorkspaces(orca, { fresh: true }), prefer ?? lastChoice)
   if (!match) return { reason: `Workspace "${context.displayName}" was not found.` }
-  if ('remote' in match) return { reason: 'Remote workspaces (SSH, WSL, paired hosts) are not supported yet.' }
+  if ('remote' in match) return { reason: 'Remote workspaces (SSH, paired hosts) are not supported yet.' }
   if ('ambiguous' in match) {
     return {
       reason: `Several workspaces are named "${context.displayName}". Pick the one you are in:`,
@@ -96,8 +126,9 @@ export async function focusedWorkspace(
 }
 
 export async function toplevel(path: string, gitPath: string): Promise<string | null> {
-  const result = await createGit(path, gitPath).run(['rev-parse', '--show-toplevel'])
-  return result.ok ? resolve(result.stdout.trim()) : null
+  const git = createGit(path, gitPath)
+  const result = await git.run(['rev-parse', '--show-toplevel'])
+  return result.ok ? resolve(git.fromGit(result.stdout.trim())) : null
 }
 
 export async function describeRepo(git: Git, root: string, workspaceId: string | null): Promise<RepoInfo> {

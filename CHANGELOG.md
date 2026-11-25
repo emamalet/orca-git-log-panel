@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.2 — 2026-11-25
+
+On Windows, workspaces of Orca's WSL environment now show their Git log: they were missing from the
+workspace list Orca gives plugins, so the panel said the workspace was not found. They are now listed
+through the orca CLI, and git for any WSL repository runs inside its distro through `wsl.exe`, so
+file modes and line endings no longer make unchanged files look modified, and rewrites, diffs and
+details work with Linux paths. Since Windows cannot watch WSL folders, the log polls them for new
+commits every few seconds.
+
 ## 0.3.1 — 2026-11-16
 
 The branches tree no longer shows the upstream next to each local branch (`→ origin/main`), so long

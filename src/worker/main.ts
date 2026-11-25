@@ -6,7 +6,7 @@ import { checkRewrite, dirtyFiles, runAction } from './actions.ts'
 import { createGit, type Git } from './git.ts'
 import { readDetails, readLogPage, readRefs, readSelectionFiles } from './log.ts'
 import { checkPush } from './push.ts'
-import { focusedWorkspace, resolveRepo, toplevel, type ListedWorkspace, type Workspace } from './repo.ts'
+import { focusedWorkspace, listWorkspaces, resolveRepo, toplevel, type Workspace } from './repo.ts'
 import { readFileDiff } from './diff.ts'
 import { DIFF_DIR, pickWorkspace, validDiffRequest, writeDiffAnchor } from './difftab.ts'
 import { createPatch } from './patch.ts'
@@ -43,7 +43,7 @@ async function gitFor(root: unknown): Promise<Git> {
 
 /** Adds `pattern` to the repository's info/exclude so the anchor never shows as untracked. */
 async function exclude(git: Git, root: string, pattern: string): Promise<void> {
-  const file = resolve(root, (await git.out(['rev-parse', '--git-path', 'info/exclude'])).trim())
+  const file = resolve(root, git.fromGit((await git.out(['rev-parse', '--git-path', 'info/exclude'])).trim()))
   const current = existsSync(file) ? readFileSync(file, 'utf8') : ''
   if (current.split(/\r?\n/).includes(pattern)) return
   mkdirSync(dirname(file), { recursive: true })
@@ -122,8 +122,7 @@ export default function activate(orca: OrcaWorkerApi): void {
   orca.panels.handle('diff.openTab', async (input) => {
     const req = validDiffRequest(input)
     const git = await gitFor(req.root)
-    const { workspaces } = (await orca.host.call('workspace.list', {})) as { workspaces: ListedWorkspace[] }
-    let workspace: Workspace | null = pickWorkspace(workspaces, req.root, req.workspaceId)
+    let workspace: Workspace | null = pickWorkspace(await listWorkspaces(orca), req.root, req.workspaceId)
     if (!workspace) {
       const focused = await focusedWorkspace(orca, req.workspaceId)
       if ('reason' in focused) return { ok: false, reason: focused.reason }
