@@ -5,6 +5,7 @@ import { renderDetails, renderMany, renderPlaceholder } from './details.ts'
 import { openDiff, type DiffMode } from './diff.ts'
 import { askDirtyCheckout, askName, askPatch, askPush, askRebasePlan, askReset, busy, confirm, editMessage, pushedWarning } from './dialogs.ts'
 import { append, h, icon } from './dom.ts'
+import { bindEditorFont } from './editor-font.ts'
 import { createFilterBar } from './filters.ts'
 import { reachableFrom, refLabels, relativeDate, fullDate, shortHash } from './format.ts'
 import { computeGraph, graphSvg, ROW_HEIGHT, type GraphRow } from './graph.ts'
@@ -1291,6 +1292,7 @@ addEventListener('focus', () => {
   if (repo) scheduleRefresh(50)
 })
 
+bindEditorFont()
 applyLayout()
 renderEmpty()
 void start()
