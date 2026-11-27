@@ -16,7 +16,7 @@
     { "path": "images/log-light.png", "alt": "Commit graph with branch tree and commit details in the light theme", "caption": "Commit graph, branch tree and details", "theme": "light" }
   ],
   "engines": {
-    "orca": ">=1.4.248"
+    "orca": ">=1.4.274"
   },
   "execution": "trusted-worker",
   "pluginApi": 1,
@@ -26,7 +26,11 @@
       {
         "id": "log",
         "title": "Git Log",
-        "icon": "branch",
+        "icon": {
+          "path": "M6 4a2 2 0 1 0 0 4a2 2 0 1 0 0-4M6 8V16M6 16a2 2 0 1 0 0 4a2 2 0 1 0 0-4M13 6H20M13 12H18M13 18H20",
+          "viewBox": "0 0 24 24",
+          "mode": "stroke"
+        },
         "entry": "src/ui/panel.html"
       }
     ],
