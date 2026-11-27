@@ -31,6 +31,7 @@
   --ref-remote: #a581d9;
   --ref-tag: #c9a24a;
   --ref-head: #e3b341;
+  --git-log-editor-font-family: var(--orca-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
   color-scheme: dark;
 }
 
@@ -61,7 +62,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 12.5px/1.4 Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font: 12.5px/1.4 var(--orca-font-sans, Inter, system-ui, -apple-system, 'Segoe UI', sans-serif);
   overflow: hidden;
   user-select: none;
 }
@@ -80,7 +81,7 @@ textarea {
 }
 
 .mono {
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--orca-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
   font-size: 11.5px;
 }
 
@@ -1377,7 +1378,9 @@ textarea.field {
 }
 
 .diff-lines {
-  font: 12px/1.5 'JetBrains Mono', 'Cascadia Code', Consolas, ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  font-family: var(--git-log-editor-font-family);
   tab-size: 4;
   min-width: min-content;
 }

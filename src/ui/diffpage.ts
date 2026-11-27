@@ -3,8 +3,11 @@ import type { DiffTabRequest } from '../shared/protocol.ts'
 import { errorMessage, orca } from './api.ts'
 import { openDiff, type DiffMode } from './diff.ts'
 import { h } from './dom.ts'
+import { bindEditorFont } from './editor-font.ts'
 
 const PREFS_KEY = 'git-log.prefs.diff'
+
+bindEditorFont()
 
 async function start(): Promise<void> {
   let req: DiffTabRequest
