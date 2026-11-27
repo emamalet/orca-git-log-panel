@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.2 — 2026-11-28
+
+The diff viewer now follows Orca's configured editor font family and updates live when the editor
+font setting changes, while the Git Log panel, editor tab, and UI chrome follow Orca's UI fonts.
+The sidebar panel also uses a dedicated commit-log icon so it stands apart from Source Control.
+
 ## 0.3.1 — 2026-11-16
 
 The branches tree no longer shows the upstream next to each local branch (`→ origin/main`), so long
